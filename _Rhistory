@@ -1,0 +1,512 @@
+pgg ~ pggcomp'
+semModel2.2f <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2f)[1:2,]
+# full model (n = 868)
+d_temp <- d %>% drop_na(age, gender, ethnic, party, nzreg)
+model <- 'sacrifice ~ pgg + age + gender + ethnic_Asian + ethnic_Maori + ethnic_Pacific + party_Labour + party_Greens + party_National + party_NZFirst + party_Other + nzreg
+# comprehension
+pgg ~ pggcomp'
+semModel2.2g <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2g)[1:12,]
+inspect(semModel2.2g, "r2")
+fig5a <-
+tibble(
+model = c("alone","w/Age","w/Gender","w/Ethn", "w/Party", "w/Edu", "w/All"),
+r2 = c(inspect(semModel2.2a,"r2")[1],
+inspect(semModel2.2b,"r2")[1],
+inspect(semModel2.2c,"r2")[1],
+inspect(semModel2.2d,"r2")[1],
+inspect(semModel2.2e,"r2")[1],
+inspect(semModel2.2f,"r2")[1],
+inspect(semModel2.2g,"r2")[1])
+) %>%
+ggplot(aes(x = factor(model, levels = .$model), y = r2)) +
+geom_bar(stat = "identity", fill = "skyblue4") +
+scale_y_continuous(limits = c(0, 0.3)) +
+labs(y = bquote(R^2), x = "Model: Sacrifice enacted")
+fig5a
+estimate <- se <- c()
+for (i in 1:7) {
+out <- parameterEstimates(get(paste("semModel2.2",letters[i], sep="")))
+estimate <- c(estimate, out$est[out$lhs=="sacrifice" & out$rhs=="pgg" & out$op=="~"])
+se <- c(se, out$se[out$lhs=="sacrifice" & out$rhs=="pgg" & out$op=="~"])
+}
+fig4a <-
+tibble(
+Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity",
+"Party support", "Education", "Full model")),
+levels = c("No controls", "Age", "Gender", "Ethnicity",
+"Party support", "Education", "Full model")),
+Estimate = estimate,
+ci.lower = estimate + (1.96*se),
+ci.upper = estimate - (1.96*se)
+) %>%
+ggplot(aes(x = fct_rev(Model),
+y = Estimate,
+ymin = ci.lower,
+ymax = ci.upper)) +
+geom_pointrange(size = 0.35) +
+geom_hline(yintercept = 0, linetype = "dashed") +
+coord_flip() +
+xlab(NULL) +
+ylab("Unstandardised Estimate\n(PGG predicting sacrifice enacted)") +
+ylim(-0.7,1.7)
+fig4a
+rm(estimate, se, i, out)
+d %>%
+ggplot(aes(x = d$pgg*100)) +
+geom_histogram() +
+facet_wrap(.~party) +
+labs(x = "Public Goods Game contribution")
+# regression
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# comprehension
+pgg ~ pggcomp
+# regression
+pgg ~ party_Labour + party_DidNotVote + party_National + party_NZFirst + party_Other'
+semModel2.2h <- sem(model, data = d_temp)
+# parameterEstimates(semModel2.2h)[2:6,]
+inspect(semModel2.2h, "r2")
+model <- '# measurement model
+coop =~ pgg + dg + tg1 + tg2 + sh
+ccb =~ real + human + concern
+# comprehension
+pgg ~ pggcomp
+tg1 + tg2 ~ tgcomp
+sh ~ shcomp
+dg ~ dgcomp
+# regression
+ccb ~ coop'
+semModel3.1a <- sem(model, data = d, ordered = c('tg1','sh','real','human','concern'))
+fitMeasures(semModel3.1a)["rmsea"] %>% round(2)
+fitMeasures(semModel3.1a)["srmr"]  %>% round(2)
+inspect(semModel3.1a, "r2")
+parameterEstimates(semModel3.1a)[14,] %>%
+mutate_if(is.numeric, round, 2) %>%
+kable() %>% kable_styling(full_width = FALSE)
+standardizedSolution(semModel3.1a)[14,]  %>%
+mutate_if(is.numeric, round, 2) %>%
+kable() %>% kable_styling(full_width = FALSE)
+sqrt(inspect(semModel3.1a, "r2")["ccb"]) %>% as.numeric() %>% round(2)
+# add latent variables to dataset
+d$coop_semModel3.1a <- predict(semModel3.1a)[,1]
+d$ccb_semModel3.1a  <- predict(semModel3.1a)[,2]
+# plot
+fig1b <-
+ggplot(d, aes(x = coop_semModel3.1a, y = ccb_semModel3.1a)) +
+geom_jitter(height = 0.02, width = 0.02, colour = "steelblue", alpha = 0.15) +
+geom_smooth(method = lm, se = FALSE, colour = "black", size = 0.5) +
+scale_y_continuous(limits = c(-0.4, 0.4)) +
+labs(x = "Cooperative Phenotype", y = "Climate Change Belief")
+fig1b
+# save
+fig1 <- plot_grid(fig1a + theme(axis.title.x = element_blank()),
+fig1b, labels = c("a","b"), ncol = 1, align = "v")
+ggsave("figures/fig1.pdf", fig1, width = 5, height = 6)
+ggsave("figures/fig1.png", fig1, width = 5, height = 6)
+# cleanup
+rm(fig1a, fig1b)
+# add latent variables to dataset
+d$coop_semModel3.1a <- predict(semModel3.1a)[,1]
+d$ccb_semModel3.1a  <- predict(semModel3.1a)[,2]
+# plot
+fig1b <-
+ggplot(d, aes(x = coop_semModel3.1a, y = ccb_semModel3.1a)) +
+geom_jitter(height = 0.02, width = 0.02, colour = "steelblue", alpha = 0.15) +
+geom_smooth(method = lm, se = FALSE, colour = "black", size = 0.5) +
+scale_x_continuous(limits = c(-0.4, 0.4)) +
+labs(x = "Cooperative Phenotype", y = "Climate Change Belief")
+fig1b
+# save
+fig1 <- plot_grid(fig1a + theme(axis.title.x = element_blank()),
+fig1b, labels = c("a","b"), ncol = 1, align = "v")
+options(width = 130)
+# load packages
+library(corrplot)
+library(cowplot)
+library(DiagrammeR)
+library(fastDummies)
+library(ggplotify)
+library(ggridges)
+library(haven)
+library(kableExtra)
+library(lavaan)
+library(lavaanPlot)
+library(tidyverse)
+library(sjlabelled)
+library(DiagrammeRsvg)
+library(rsvg)
+# set ggplot theme
+theme_set(theme_classic())
+load("data/climate.rda")
+# n = 1045
+d <-
+d %>%
+# less than 5 mins or longer than 50 mins to complete games
+filter(secs > 300 & secs < 3000) %>%
+# don't get rid of people who failed comprehension qs
+# must have complete cases for climate change vars
+filter(!is.na(sacrifice) & !is.na(real) & !is.na(human) & !is.na(concern))
+# n = 897
+# game data between 0 and 1
+d <-
+d %>%
+mutate(shp2 = shp2 / 50,
+shp3 = shp3 / 50,
+tg2  = tg2  / 150,
+pgg  = pgg  / 100,
+ug1  = ug1  / 100,
+ug2  = ug2  / 100,
+dg   = dg   / 100,
+tpp2 = tpp2 / 100,
+spp2 = spp2 / 50,
+spp3 = spp3 / 50)
+# create dummy cols
+d <- dummy_cols(d, c("ethnic","party"))
+colnames(d)[47] <- "party_DidNotVote"
+colnames(d)[43] <- "party_NZFirst"
+# update comprehension questions: 1 == correct, 0 = incorrect
+d <-
+d %>%
+mutate(shcomp  = ifelse(shcomp == 3, 1, 0),
+tgcomp  = ifelse(tgcomp == 1, 1, 0),
+pggcomp = ifelse(pggcomp == 3, 1, 0),
+dgcomp  = ifelse(dgcomp == 1, 1, 0),
+ugcomp  = ifelse(ugcomp == 3, 1, 0),
+tppcomp = ifelse(tppcomp == 1, 1, 0),
+sppcomp = ifelse(sppcomp == 2, 1, 0),
+shpcomp = ifelse(shpcomp == 3, 1, 0))
+model <- 'coop =~ pgg + dg + tg1 + tg2 + sh
+# comprehension
+pgg ~ pggcomp
+tg1 + tg2 ~ tgcomp
+sh ~ shcomp
+dg ~ dgcomp'
+cfaModel1.1 <- cfa(model, data = d, ordered = c('tg1','sh'))
+fitMeasures(cfaModel1.1)["rmsea"] %>% round(2)
+fitMeasures(cfaModel1.1)["srmr"] %>% round(2)
+inspect(cfaModel1.1, "r2")
+model <- 'ccb =~ real + human + concern'
+cfaModel1.2 <- cfa(model, data = d, ordered = c('real','human','concern'))
+fitMeasures(cfaModel1.2)["rmsea"] %>% round(2)
+fitMeasures(cfaModel1.2)["srmr"] %>% round(2)
+inspect(cfaModel1.2, "r2")
+model <- '# measurement model
+coop =~ pgg + dg + tg1 + tg2 + sh
+# comprehension
+pgg ~ pggcomp
+tg1 + tg2 ~ tgcomp
+sh ~ shcomp
+dg ~ dgcomp
+# regression
+sacrifice ~ coop'
+semModel2.1a <- sem(model, data = d, ordered = c('tg1','sh','sacrifice'))
+fitMeasures(semModel2.1a)["rmsea"] %>% round(2)
+fitMeasures(semModel2.1a)["srmr"] %>% round(2)
+inspect(semModel2.1a, "r2")
+parameterEstimates(semModel2.1a)[11,] %>%
+mutate_if(is.numeric, round, 2) %>%
+kable() %>% kable_styling(full_width = FALSE)
+sqrt(inspect(semModel2.1a, "r2")["sacrifice"]) %>% as.numeric() %>% round(2)
+# add coop to dataframe
+d$coop_semModel2.1a <- predict(semModel2.1a)
+fig1a <-
+ggplot(d, aes(x = sacrifice, y = coop_semModel2.1a, group = sacrifice)) +
+geom_boxplot(outlier.shape = NA) +
+geom_jitter(height = 0.02, width = 0.3, colour = "steelblue", alpha = 0.15) +
+coord_flip() +
+scale_x_continuous(breaks = 1:7) +
+scale_y_continuous(limits = c(-0.4, 0.4)) +
+labs(y = "Cooperative Phenotype", x = "Have you made sacrifices to your\nstandard of living in order to\nprotect the environment? (1-7)") +
+theme(axis.title.y = element_text(size = 11))
+fig1a
+# age (n = 896)
+d_temp <- d %>% drop_na(age)
+model <- '# measurement model
+coop =~ pgg + dg + tg1 + tg2 + sh
+# comprehension
+pgg ~ pggcomp
+tg1 + tg2 ~ tgcomp
+sh ~ shcomp
+dg ~ dgcomp
+# regression
+sacrifice ~ coop + age'
+semModel2.1b <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+# parameterEstimates(semModel2.1b)[11:12,]
+# gender (n = 896)
+d_temp <- d %>% drop_na(gender)
+model <- '# measurement model
+coop =~ pgg + dg + tg1 + tg2 + sh
+# comprehension
+pgg ~ pggcomp
+tg1 + tg2 ~ tgcomp
+sh ~ shcomp
+dg ~ dgcomp
+# regression
+sacrifice ~ coop + gender'
+semModel2.1c <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+# parameterEstimates(semModel2.1c)[11:12,]
+# ethnicity (n = 890)
+d_temp <- d %>% drop_na(ethnic)
+model <- '# measurement model
+coop =~ pgg + dg + tg1 + tg2 + sh
+# comprehension
+pgg ~ pggcomp
+tg1 + tg2 ~ tgcomp
+sh ~ shcomp
+dg ~ dgcomp
+# regression
+sacrifice ~ coop + ethnic_Asian + ethnic_Maori + ethnic_Pacific'
+semModel2.1d <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+# parameterEstimates(semModel2.1d)[11:14,]
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# measurement model
+coop =~ pgg + dg + tg1 + tg2 + sh
+# comprehension
+pgg ~ pggcomp
+tg1 + tg2 ~ tgcomp
+sh ~ shcomp
+dg ~ dgcomp
+# regression
+sacrifice ~ coop + party_Labour + party_Greens + party_National + party_NZFirst + party_Other'
+semModel2.1e <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+# parameterEstimates(semModel2.1e)[11:16,]
+# nzreg (n = 896)
+d_temp <- d %>% drop_na(nzreg)
+model <- '# measurement model
+coop =~ pgg + dg + tg1 + tg2 + sh
+# comprehension
+pgg ~ pggcomp
+tg1 + tg2 ~ tgcomp
+sh ~ shcomp
+dg ~ dgcomp
+# regression
+sacrifice ~ coop + nzreg'
+semModel2.1f <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+# parameterEstimates(semModel2.1f)[11:12,]
+# full model (n = 868)
+d_temp <- d %>% drop_na(age, gender, ethnic, party, nzreg)
+model <- '# measurement model
+coop =~ pgg + dg + tg1 + tg2 + sh
+# comprehension
+pgg ~ pggcomp
+tg1 + tg2 ~ tgcomp
+sh ~ shcomp
+dg ~ dgcomp
+# regression
+sacrifice ~ coop + age + gender + ethnic_Asian + ethnic_Maori + ethnic_Pacific + party_Labour + party_Greens + party_National + party_NZFirst + party_Other + nzreg'
+semModel2.1g <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+# parameterEstimates(semModel2.1g)[11:22,]
+inspect(semModel2.1g, "r2")
+estimate <- se <- c()
+for (i in 1:7) {
+out <- parameterEstimates(get(paste("semModel2.1",letters[i], sep="")))
+estimate <- c(estimate, out$est[out$lhs=="sacrifice" & out$rhs=="coop" & out$op=="~"])
+se <- c(se, out$se[out$lhs=="sacrifice" & out$rhs=="coop" & out$op=="~"])
+}
+fig2a <-
+tibble(
+Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity",
+"Party support", "Education", "Full model")),
+levels = c("No controls", "Age", "Gender", "Ethnicity",
+"Party support", "Education", "Full model")),
+Estimate = estimate,
+ci.lower = estimate + (1.96*se),
+ci.upper = estimate - (1.96*se)
+) %>%
+ggplot(aes(x = fct_rev(Model),
+y = Estimate,
+ymin = ci.lower,
+ymax = ci.upper)) +
+geom_pointrange(size = 0.35) +
+geom_hline(yintercept = 0, linetype = "dashed") +
+coord_flip() +
+xlab(NULL) +
+ylab("Unstandardised Estimate\n(coop phenotype predicting sacrifice enacted)") +
+ylim(-0.7,1.7)
+fig2a
+rm(estimate, se, i, out)
+d %>%
+ggplot(aes(x = coop_semModel2.1a)) +
+geom_histogram() +
+facet_wrap(.~party)
+# regression
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# measurement model
+coop =~ pgg + dg + tg1 + tg2 + sh
+# comprehension
+pgg ~ pggcomp
+tg1 + tg2 ~ tgcomp
+sh ~ shcomp
+dg ~ dgcomp
+# regression
+coop ~ party_Labour + party_DidNotVote + party_National + party_NZFirst + party_Other'
+semModel2.1h <- sem(model, data = d_temp, ordered = c('tg1','sh'))
+# parameterEstimates(semModel2.1h)[10:14,]
+inspect(semModel2.1h, "r2")
+model <- 'sacrifice ~ pgg
+# comprehension
+pgg ~ pggcomp'
+semModel2.2a <- sem(model, data = d, ordered = c('sacrifice'))
+fitMeasures(semModel2.2a)["rmsea"] %>% round(2)
+fitMeasures(semModel2.2a)["srmr"] %>% round(2)
+inspect(semModel2.2a, "r2")
+parameterEstimates(semModel2.2a)[1,] %>%
+mutate_if(is.numeric, round, 2) %>%
+kable() %>% kable_styling(full_width = FALSE)
+sqrt(inspect(semModel2.2a, "r2")["sacrifice"]) %>% as.numeric() %>% round(2)
+fig3a <-
+d %>%
+mutate(cut = cut(pgg*100, 11)) %>%
+ggplot(aes(x = cut, y = sacrifice)) +
+geom_boxplot(outlier.shape = NA) +
+geom_jitter(aes(x = (pgg*10)+1), width = 0.2, height = 0.3, colour = "darkseagreen4", alpha = 0.3) +
+scale_y_continuous(breaks = 1:7) +
+labs(x = "Contribution in\nPublic Goods Game (points)", y = "Have you made sacrifices to your\nstandard of living in order to\nprotect the environment? (1-7)") +
+scale_x_discrete(labels = seq(0, 100, length.out = 11)) +
+theme(axis.title.y = element_text(size = 11))
+fig3a
+# age (n = 896)
+d_temp <- d %>% drop_na(age)
+model <- 'sacrifice ~ pgg + age
+# comprehension
+pgg ~ pggcomp'
+semModel2.2b <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2b)[1:2,]
+# gender (n = 896)
+d_temp <- d %>% drop_na(gender)
+model <- 'sacrifice ~ pgg + gender
+# comprehension
+pgg ~ pggcomp'
+semModel2.2c <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2c)[1:2,]
+# ethnicity (n = 890)
+d_temp <- d %>% drop_na(ethnic)
+model <- 'sacrifice ~ pgg + ethnic_Asian + ethnic_Maori + ethnic_Pacific
+# comprehension
+pgg ~ pggcomp'
+semModel2.2d <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2d)[1:4,]
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- 'sacrifice ~ pgg + party_Labour + party_Greens + party_National + party_NZFirst + party_Other
+# comprehension
+pgg ~ pggcomp'
+semModel2.2e <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2e)[1:6,]
+# nzreg (n = 896)
+d_temp <- d %>% drop_na(nzreg)
+model <- 'sacrifice ~ pgg + nzreg
+# comprehension
+pgg ~ pggcomp'
+semModel2.2f <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2f)[1:2,]
+# full model (n = 868)
+d_temp <- d %>% drop_na(age, gender, ethnic, party, nzreg)
+model <- 'sacrifice ~ pgg + age + gender + ethnic_Asian + ethnic_Maori + ethnic_Pacific + party_Labour + party_Greens + party_National + party_NZFirst + party_Other + nzreg
+# comprehension
+pgg ~ pggcomp'
+semModel2.2g <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2g)[1:12,]
+inspect(semModel2.2g, "r2")
+fig5a <-
+tibble(
+model = c("alone","w/Age","w/Gender","w/Ethn", "w/Party", "w/Edu", "w/All"),
+r2 = c(inspect(semModel2.2a,"r2")[1],
+inspect(semModel2.2b,"r2")[1],
+inspect(semModel2.2c,"r2")[1],
+inspect(semModel2.2d,"r2")[1],
+inspect(semModel2.2e,"r2")[1],
+inspect(semModel2.2f,"r2")[1],
+inspect(semModel2.2g,"r2")[1])
+) %>%
+ggplot(aes(x = factor(model, levels = .$model), y = r2)) +
+geom_bar(stat = "identity", fill = "skyblue4") +
+scale_y_continuous(limits = c(0, 0.3)) +
+labs(y = bquote(R^2), x = "Model: Sacrifice enacted")
+fig5a
+estimate <- se <- c()
+for (i in 1:7) {
+out <- parameterEstimates(get(paste("semModel2.2",letters[i], sep="")))
+estimate <- c(estimate, out$est[out$lhs=="sacrifice" & out$rhs=="pgg" & out$op=="~"])
+se <- c(se, out$se[out$lhs=="sacrifice" & out$rhs=="pgg" & out$op=="~"])
+}
+fig4a <-
+tibble(
+Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity",
+"Party support", "Education", "Full model")),
+levels = c("No controls", "Age", "Gender", "Ethnicity",
+"Party support", "Education", "Full model")),
+Estimate = estimate,
+ci.lower = estimate + (1.96*se),
+ci.upper = estimate - (1.96*se)
+) %>%
+ggplot(aes(x = fct_rev(Model),
+y = Estimate,
+ymin = ci.lower,
+ymax = ci.upper)) +
+geom_pointrange(size = 0.35) +
+geom_hline(yintercept = 0, linetype = "dashed") +
+coord_flip() +
+xlab(NULL) +
+ylab("Unstandardised Estimate\n(PGG predicting sacrifice enacted)") +
+ylim(-0.7,1.7)
+fig4a
+rm(estimate, se, i, out)
+d %>%
+ggplot(aes(x = d$pgg*100)) +
+geom_histogram() +
+facet_wrap(.~party) +
+labs(x = "Public Goods Game contribution")
+# regression
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# comprehension
+pgg ~ pggcomp
+# regression
+pgg ~ party_Labour + party_DidNotVote + party_National + party_NZFirst + party_Other'
+semModel2.2h <- sem(model, data = d_temp)
+# parameterEstimates(semModel2.2h)[2:6,]
+inspect(semModel2.2h, "r2")
+model <- '# measurement model
+coop =~ pgg + dg + tg1 + tg2 + sh
+ccb =~ real + human + concern
+# comprehension
+pgg ~ pggcomp
+tg1 + tg2 ~ tgcomp
+sh ~ shcomp
+dg ~ dgcomp
+# regression
+ccb ~ coop'
+semModel3.1a <- sem(model, data = d, ordered = c('tg1','sh','real','human','concern'))
+fitMeasures(semModel3.1a)["rmsea"] %>% round(2)
+fitMeasures(semModel3.1a)["srmr"]  %>% round(2)
+inspect(semModel3.1a, "r2")
+parameterEstimates(semModel3.1a)[14,] %>%
+mutate_if(is.numeric, round, 2) %>%
+kable() %>% kable_styling(full_width = FALSE)
+standardizedSolution(semModel3.1a)[14,]  %>%
+mutate_if(is.numeric, round, 2) %>%
+kable() %>% kable_styling(full_width = FALSE)
+sqrt(inspect(semModel3.1a, "r2")["ccb"]) %>% as.numeric() %>% round(2)
+# add latent variables to dataset
+d$coop_semModel3.1a <- predict(semModel3.1a)[,1]
+d$ccb_semModel3.1a  <- predict(semModel3.1a)[,2]
+# plot
+fig1b <-
+ggplot(d, aes(x = coop_semModel3.1a, y = ccb_semModel3.1a)) +
+geom_jitter(height = 0.02, width = 0.02, colour = "steelblue", alpha = 0.15) +
+geom_smooth(method = lm, se = FALSE, colour = "black", size = 0.5) +
+scale_x_continuous(limits = c(-0.4, 0.4)) +
+labs(x = "Cooperative Phenotype", y = "Climate Change Belief")
+fig1b
+# save
+fig1 <- plot_grid(fig1a + theme(axis.title.x = element_blank()),
+fig1b, labels = c("a","b"), ncol = 1, align = "v")
+ggsave("figures/fig1.pdf", fig1, width = 5, height = 6)
+ggsave("figures/fig1.png", fig1, width = 5, height = 6)
+# cleanup
+rm(fig1a, fig1b)

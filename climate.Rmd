@@ -1,0 +1,1707 @@
+---
+title: "Climate Change & Cooperative Phenotype - Analyses controlling for comprehension"
+author: Dan Kelly and Scott Claessens
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    number_sections: false
+    toc_float: true
+---
+
+The purpose of this document is to report the further analyses for the climate change project, controlling for comprehension.
+
+The analyses proceed as follows:
+
+1. We fit **confirmatory factor analyses** to ensure that the latent variables we are going to use fit the data well. These are (a) cooperative phenotype latent variable, and (b) climate change belief latent variable.
+2. We fit **structural equation models** regressing environmental sacrifice enacted onto the cooperative phenotype latent variable. We also run controls and swap out the cooperative phenotype for just the Public Goods Game.
+3. We fit **structural equation models** regressing climate change belief latent variable onto the cooperative phenotype latent variable. Again, we run controls and swap out for PGG.
+4. We conduct **mediation models** whereby environmental sacrifice enacted mediates the relationship between cooperative phenotype and climate change belief. Again, we run controls and swap out for PGG.
+
+# 0. Setup
+
+```{r echo=FALSE, cache=FALSE, include=FALSE}
+options(width = 130)
+
+# load packages
+library(corrplot)
+library(cowplot)
+library(DiagrammeR)
+library(fastDummies)
+library(ggplotify)
+library(ggridges)
+library(grid)
+library(gridExtra)
+library(haven)
+library(kableExtra)
+library(lavaan)
+library(lavaanPlot)
+library(psych)
+library(tidyverse)
+library(sjlabelled)
+library(DiagrammeRsvg)
+library(rsvg)
+
+# set ggplot theme
+theme_set(theme_classic())
+```
+
+```{r echo=F, eval=F}
+# game data
+d1 <-
+  read_sav("data/NZAVS T10 (2018) SPSS Economic Games.sav") %>%
+  # keep only participants who were paid and did not time out
+  filter(Chk1Ae == 1 & Chk2Ae == 1) %>%
+  # select relevant variables
+  select(Questionnaire.Num, SHAe:cmpSPPAe, Secs01Ae:Secs48Ae)
+
+# NZAVS T09 data
+d2 <-
+  read_sav("data/NZAVS T9 (2017) SPSS Base Dataset.sav") %>%
+  # select relevant variables
+  select(Questionnaire.Num, Env.SacMade.T9, Env.ClimateChgReal.T9, Env.ClimateChgCause.T9,
+         Env.ClimateChgConcern.T9, Age.T9, Gender.T9, EthnicCats.T9, 
+         NZREG.T9, Pol.ReportedPartySupport.T09)
+
+# link datasets
+d <- 
+  left_join(d1, d2, by = "Questionnaire.Num") %>%
+  # calculate new "time on games" variable
+  mutate(secs = rowSums(select(., starts_with("Secs")), na.rm = TRUE)) %>%
+  select(-(Secs01Ae:Secs48Ae)) %>%
+  # EthnicCats is a factor
+  mutate(EthnicCats.T9 = factor(ifelse(EthnicCats.T9 == 1, "Pakeha",
+                                ifelse(EthnicCats.T9 == 2, "Maori",
+                                ifelse(EthnicCats.T9 == 3, "Pacific",
+                                ifelse(EthnicCats.T9 == 4, "Asian", EthnicCats.T9)))))) %>%
+   # Pol.ReportedPartySupport is a factor
+  mutate(Pol.ReportedPartySupport.T09 = 
+           factor(ifelse(Pol.ReportedPartySupport.T09 == -2, "Did not vote",
+                  ifelse(Pol.ReportedPartySupport.T09 == -1, NA,
+                  ifelse(Pol.ReportedPartySupport.T09 == 0,  "Other",
+                  ifelse(Pol.ReportedPartySupport.T09 == 1,  "National",
+                  ifelse(Pol.ReportedPartySupport.T09 == 2,  "Labour",
+                  ifelse(Pol.ReportedPartySupport.T09 == 3,  "Greens",
+                  ifelse(Pol.ReportedPartySupport.T09 == 4,  "NZ First", Pol.ReportedPartySupport.T09)))))))))
+  
+rm(d1); rm(d2)
+
+# remove labels
+d <- remove_all_labels(d)
+
+colnames(d) <- c("QNum", "sh", "shp1", "shp2", "shp3", "tg1", "tg2", "pgg",
+                 "ug1", "ug2", "dg", "tpp1", "tpp2", "spp1", "spp2", "spp3",
+                 "session", "order", "clarity", "shcomp", "shpcomp", "tgcomp",
+                 "pggcomp", "ugcomp", "dgcomp", "tppcomp", "sppcomp",
+                 "sacrifice", "real", "human", "concern", "age", "gender", "ethnic",
+                 "nzreg", "party", "secs")
+
+save(d, file = "data/climate.rda")
+```
+
+Load data, and exclude participants according to criteria.
+
+```{r}
+load("data/climate.rda")
+
+# n = 1045
+d <-
+  d %>%
+  # less than 5 mins or longer than 50 mins to complete games
+  filter(secs > 300 & secs < 3000) %>%
+  # don't get rid of people who failed comprehension qs
+  # must have complete cases for climate change vars
+  filter(!is.na(sacrifice) & !is.na(real) & !is.na(human) & !is.na(concern))
+# n = 897
+```
+
+```{r echo = F}
+# game data between 0 and 1
+d <-
+  d %>%
+  mutate(shp2 = shp2 / 50,
+         shp3 = shp3 / 50,
+         tg2  = tg2  / 150,
+         pgg  = pgg  / 100,
+         ug1  = ug1  / 100,
+         ug2  = ug2  / 100,
+         dg   = dg   / 100,
+         tpp2 = tpp2 / 100,
+         spp2 = spp2 / 50,
+         spp3 = spp3 / 50)
+
+# create dummy cols
+d <- dummy_cols(d, c("ethnic","party"))
+colnames(d)[47] <- "party_DidNotVote"
+colnames(d)[43] <- "party_NZFirst"
+
+# update comprehension questions: 1 == correct, 0 = incorrect
+d <-
+  d %>%
+  mutate(shcomp  = ifelse(shcomp == 3, 1, 0),
+         tgcomp  = ifelse(tgcomp == 1, 1, 0),
+         pggcomp = ifelse(pggcomp == 3, 1, 0),
+         dgcomp  = ifelse(dgcomp == 1, 1, 0),
+         ugcomp  = ifelse(ugcomp == 3, 1, 0),
+         tppcomp = ifelse(tppcomp == 1, 1, 0),
+         sppcomp = ifelse(sppcomp == 2, 1, 0),
+         shpcomp = ifelse(shpcomp == 3, 1, 0))
+```
+Display sample characteristics.
+
+```{r echo=F, warning=F, message=F}
+# age
+fig01a <-
+  d %>%
+  drop_na(age) %>%
+  ggplot(aes(x = age)) +
+  geom_histogram(binwidth = 2, fill = "azure3") +
+  xlab("Age (years)") +
+  ylab(NULL) +
+  theme_classic()
+
+# gender
+fig01b <-
+  d %>%
+  drop_na(gender) %>%
+  mutate(gender = factor(ifelse(gender == 0, "F", "M"))) %>%
+  ggplot(aes(x = gender)) +
+  geom_bar(fill = "azure3") +
+  xlab("Gender") +
+  ylab(NULL) +
+  theme_classic()
+
+# ethnicity
+fig01c <-
+  d %>%
+  drop_na(ethnic) %>%
+  mutate(ethnic = factor(
+    ethnic, levels = names(sort(table(ethnic),decreasing=TRUE)))) %>%
+  ggplot(aes(x = ethnic)) +
+  geom_bar(fill = "azure3") +
+  xlab("Ethnicity") +
+  ylab(NULL) +
+  theme_classic()
+
+# education
+fig01d <-
+  d %>%
+  drop_na(nzreg) %>%
+  ggplot(aes(x = nzreg)) +
+  geom_histogram(binwidth = 1, fill = "azure3", col = "white") +
+  scale_x_continuous(breaks = seq(0, 10, by = 2)) +
+  xlab("Education") +
+  ylab(NULL) +
+  theme_classic()
+
+# put together
+layout <-
+  rbind(c(1, 1, 2, 2),
+        c(3, 3, 4, 4))
+y.grob <- textGrob("        Frequency", 
+                   gp = gpar(col = "black", fontsize = 12), rot = 90)
+fig01 <- 
+  arrangeGrob(fig01a, fig01b,
+               fig01c, fig01d, layout_matrix = layout)
+fig01 <- arrangeGrob(fig01, left = y.grob)
+
+# save for publication
+ggsave("figures/fig01.pdf", fig01, width = 22, height = 15, units = "cm")
+ggsave("figures/fig01.png", fig01, width = 22, height = 15, units = "cm")
+
+ggdraw(fig01)
+```
+
+Get correlation matrix for games and climate change measures.
+
+```{r}
+cor1 <- corr.test(d[,c(2,6,7,8,11,28:31)], method = "spearman", adjust = "BH")
+
+cor1
+```
+
+# 1. CFA
+
+## 1.1. Cooperative phenotype
+
+Cronbach's alpha for cooperation games.
+
+```{r echo = F}
+psych::alpha(d[,c(2,6,7,8,11)])
+```
+
+Fit a confirmatory factor analysis model to ensure that the "cooperative phenotype" latent variable fits the data well.
+
+```{r}
+model <- 'coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp'
+
+cfaModel1.1 <- cfa(model, data = d, ordered = c('tg1','sh'))
+```
+
+How well does this model fit? We use the following criteria to measure model fit:
+
+* *Root Mean Square Error of Approximation (RMSEA).* Excellent fit < .01. Good fit < .05. Mediocre fit < .08.
+* *Standardized Root Mean Square Residual (SRMR).* Good fit <.08.
+
+```{r echo=F}
+fitMeasures(cfaModel1.1)["rmsea"] %>% round(2)
+fitMeasures(cfaModel1.1)["srmr"] %>% round(2)
+```
+
+Both indices suggest a good fit. How much variance does our latent variable explain?
+
+```{r}
+inspect(cfaModel1.1, "r2")
+```
+
+This means that our latent variable "cooperative phenotype" accounts for 18% of the variation in PGG, 27% of the variation in DG, 52% of the variation in TG1, 24% of the variation in TG2, and 34% of the variation in SH.
+
+## 1.2. Climate change belief
+
+Cronbach's alpha for climate change belief.
+
+```{r echo = F}
+psych::alpha(d[,29:31])
+```
+
+Fit a confirmatory factor analysis model to ensure that the "climate change belief" latent variable fits the data well.
+
+```{r}
+model <- 'ccb =~ real + human + concern'
+
+cfaModel1.2 <- cfa(model, data = d, ordered = c('real','human','concern'))
+```
+
+How well does this model fit?
+
+```{r echo=F}
+fitMeasures(cfaModel1.2)["rmsea"] %>% round(2)
+fitMeasures(cfaModel1.2)["srmr"] %>% round(2)
+```
+
+The fit is basically perfect. How much variation does the latent variable account for?
+
+```{r}
+inspect(cfaModel1.2, "r2")
+```
+
+This means that our latent variable "climate change belief" accounts for 79% of the variation in responses to whether climate change is real, 78% of the variation in responses to whether it is caused by humans, and 74% of the variation in responses to whether participants were concerned about it.
+
+# 2. SEM (Environmental Sacrifice Enacted)
+
+## 2.1. Cooperative phenotype
+
+Next, we want to understand the relationship between an individual's cooperative phenotype and how likely they are to have made sacrifices for the environment.
+
+Fit the structural equation model, regressing environmental sacrifice enacted onto the cooperative phenotype latent variable.
+
+```{r}
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          sacrifice ~ coop'
+
+semModel2.1a <- sem(model, data = d, ordered = c('tg1','sh','sacrifice'))
+```
+
+How well does this model fit the data?
+
+```{r echo=F}
+fitMeasures(semModel2.1a)["rmsea"] %>% round(2)
+fitMeasures(semModel2.1a)["srmr"] %>% round(2)
+```
+
+These fit indices suggest that the model fits well. How much variation does it account for?
+
+```{r}
+inspect(semModel2.1a, "r2")
+```
+
+This means that cooperative phenotype accounts for 1% of the variance in sacrifice made for the environment.
+
+Does the cooperative phenotype predict sacrifices made for the environment?
+
+```{r echo=F}
+parameterEstimates(semModel2.1a)[11,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+```
+
+The slope of 0.75 is difficult to interpret on its own, as this is a cumulative link ordinal regression (to deal with the Likert scale nature of the `sacrifice` variable). However, it is positive and significant, suggesting that the cooperative phenotype positively predicts environmental sacrifice enacted.
+
+We can get an effect size (semi-partial r). This can be interpreted much like Cohen's d.
+
+```{r echo=F}
+sqrt(inspect(semModel2.1a, "r2")["sacrifice"]) %>% as.numeric() %>% round(2)
+```
+
+This suggests a small effect size.
+
+This relationship is easier to see if we directly plot these predictions. Below, the regression line is the change in mean score of environmental sacrifice enacted (1-7) with each unit change in the cooperation factor.
+
+```{r echo=F, warning=F, message=F}
+# add coop to dataframe
+d$coop_semModel2.1a <- predict(semModel2.1a)
+
+fig1a <-
+  ggplot(d, aes(x = sacrifice, y = coop_semModel2.1a, group = sacrifice)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(height = 0.02, width = 0.3, colour = "steelblue", alpha = 0.15) +
+  coord_flip() +
+  scale_x_continuous(breaks = 1:7) +
+  scale_y_continuous(limits = c(-0.4, 0.4)) +
+  labs(y = "Cooperative Phenotype", x = "Have you made sacrifices to your\nstandard of living in order to\nprotect the environment? (1-7)") +
+  theme(axis.title.y = element_text(size = 11))
+
+fig1a
+```
+
+This plot suggests that the effect of cooperative phenotype on environmental sacrifice is positive but weak (although it is significant).
+
+Next, we ensure that this finding is robust to various controls, including (a) age, (b) gender, (c) ethnicity, (d) party support, (e) education, and (f) all of these. How much variance does this fullmodel explain?
+
+```{r echo=F}
+# age (n = 896)
+d_temp <- d %>% drop_na(age)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          sacrifice ~ coop + age'
+semModel2.1b <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+#parameterEstimates(semModel2.1b)[11:12,]
+
+# gender (n = 896)
+d_temp <- d %>% drop_na(gender)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          sacrifice ~ coop + gender'
+semModel2.1c <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+#parameterEstimates(semModel2.1c)[11:12,]
+
+# ethnicity (n = 890)
+d_temp <- d %>% drop_na(ethnic)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          sacrifice ~ coop + ethnic_Asian + ethnic_Maori + ethnic_Pacific'
+semModel2.1d <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+#parameterEstimates(semModel2.1d)[11:14,]
+
+# SES (n = 897)
+#d_temp <- d %>% drop_na(secs)
+#model <- '# measurement model
+          #coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          #pgg ~ pggcomp
+          #tg1 + tg2 ~ tgcomp
+          #sh ~ shcomp
+          #dg ~ dgcomp
+          # regression
+          #sacrifice ~ coop + secs'
+#semModel2.1.1d <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+#parameterEstimates(semModel2.1.1d)[11:12,]
+
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          sacrifice ~ coop + party_Labour + party_Greens + party_National + party_NZFirst + party_Other'
+semModel2.1e <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+#parameterEstimates(semModel2.1e)[11:16,]
+
+# nzreg (n = 896)
+d_temp <- d %>% drop_na(nzreg)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          sacrifice ~ coop + nzreg'
+semModel2.1f <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+#parameterEstimates(semModel2.1f)[11:12,]
+
+# full model (n = 868)
+d_temp <- d %>% drop_na(age, gender, ethnic, party, nzreg)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          sacrifice ~ coop + age + gender + ethnic_Asian + ethnic_Maori + ethnic_Pacific + party_Labour + party_Greens + party_National + party_NZFirst + party_Other + nzreg'
+semModel2.1g <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+#parameterEstimates(semModel2.1g)[11:22,]
+
+inspect(semModel2.1g, "r2")
+```
+
+This means that our full model accounts for 11% of the variance in sacrifice made for the environment. 
+
+Next, we plot how the slope of cooperative phenotype (the unstandardised parameter) varies across our different control models.
+
+
+```{r echo=F}
+estimate <- se <- c()
+for (i in 1:7) {
+  out <- parameterEstimates(get(paste("semModel2.1",letters[i], sep="")))
+  estimate <- c(estimate, out$est[out$lhs=="sacrifice" & out$rhs=="coop" & out$op=="~"])
+  se <- c(se, out$se[out$lhs=="sacrifice" & out$rhs=="coop" & out$op=="~"])
+}
+
+fig2a <-
+  tibble(
+    Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity", 
+                  "Party support", "Education", "Full model")),
+                  levels = c("No controls", "Age", "Gender", "Ethnicity", 
+                  "Party support", "Education", "Full model")),
+    Estimate = estimate,
+    ci.lower = estimate + (1.96*se),
+    ci.upper = estimate - (1.96*se)
+  ) %>%
+  
+  ggplot(aes(x = fct_rev(Model), 
+             y = Estimate, 
+             ymin = ci.lower, 
+             ymax = ci.upper)) +
+  geom_pointrange(size = 0.35) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  coord_flip() +
+  xlab(NULL) +
+  ylab("Unstandardised Estimate\n(coop phenotype predicting pro-env behaviour)") +
+  ylim(-0.7,1.7)
+
+fig2a
+
+rm(estimate, se, i, out)
+```
+
+The effect of cooperative phenotype on pro-environmental behaviour persists for all control models, except when political party support is included in the model (and therefore the model with all controls too). This suggests that there is some link between the cooperative phenotype and party support. Let's validate this by looking at how the cooperative phenotype varies across political parties, and investigating the amount of variance that it explains.
+
+```{r, echo=F, message=F, warning=F}
+d %>%
+  ggplot(aes(x = coop_semModel2.1a)) +
+  geom_histogram() +
+  facet_wrap(.~party)
+
+# regression
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          coop ~ party_Labour + party_DidNotVote + party_National + party_NZFirst + party_Other'
+semModel2.1h <- sem(model, data = d_temp, ordered = c('tg1','sh'))
+parameterEstimates(semModel2.1h)[10:14,]
+inspect(semModel2.1h, "r2")
+```
+
+This means that political party accounts for 5% of the variation in the latent variable "cooperative phenotype".
+
+How well does this model fit the data?
+
+```{r echo=F}
+fitMeasures(semModel2.1h)["rmsea"] %>% round(2)
+fitMeasures(semModel2.1h)["srmr"] %>% round(2)
+```
+This model fits the data well.
+
+## 2.2. Public Goods Game
+
+Now we run the same analyses as above, but using only the contribution in the Public Goods Game (instead of the cooperative phenotype latent variable). This is because the PGG is the closest approximation of the social dilemma of action on climate change.
+
+```{r}
+model <- 'sacrifice ~ pgg
+          # comprehension
+          pgg ~ pggcomp'
+semModel2.2a <- sem(model, data = d, ordered = c('sacrifice'))
+```
+
+How well does this model fit the data?
+
+```{r echo=F}
+fitMeasures(semModel2.2a)["rmsea"] %>% round(2)
+fitMeasures(semModel2.2a)["srmr"] %>% round(2)
+```
+
+The model fits the data well. How much variation does it account for?
+
+```{r}
+inspect(semModel2.2a, "r2")
+```
+
+This means that responses to the PGG explain less than 1% of the variance in sacrifices made for the environment.
+
+```{r echo=F}
+parameterEstimates(semModel2.2a)[1,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+```
+
+Again, this slope of 0.25 is difficult to interpret on its own. However, it is also positive and significant. 
+
+Get an effect size.
+
+```{r echo=F}
+sqrt(inspect(semModel2.2a, "r2")["sacrifice"]) %>% as.numeric() %>% round(2)
+```
+This means that the effect is small.
+
+Plot predictions.
+
+```{r echo=F, warning=F, message=F}
+fig3a <-
+  d %>%
+  mutate(cut = cut(pgg*100, 11)) %>%
+  ggplot(aes(x = sacrifice, y = cut, group= sacrifice)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(width = 0.2, height = 0.3, colour = "darkseagreen4", alpha = 0.3) +
+  coord_flip() +
+  scale_x_continuous(breaks = 1:7) +
+  scale_y_discrete(labels = seq(0, 100, length.out = 11)) +
+  labs(y = "Contribution in\nPublic Goods Game (points)", x = "Have you made sacrifices to your\nstandard of living in order to\nprotect the environment? (1-7)") +
+  theme(axis.title.y = element_text(size = 11))
+
+fig3a
+```
+
+What happens when we control for the same variables as before? How much variation does the full model account for?
+
+```{r echo=F}
+# age (n = 896)
+d_temp <- d %>% drop_na(age)
+model <- 'sacrifice ~ pgg + age
+          # comprehension
+          pgg ~ pggcomp'
+semModel2.2b <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2b)[1:2,]
+
+# gender (n = 896)
+d_temp <- d %>% drop_na(gender)
+model <- 'sacrifice ~ pgg + gender
+          # comprehension
+          pgg ~ pggcomp'
+semModel2.2c <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2c)[1:2,]
+
+# ethnicity (n = 890)
+d_temp <- d %>% drop_na(ethnic)
+model <- 'sacrifice ~ pgg + ethnic_Asian + ethnic_Maori + ethnic_Pacific
+          # comprehension
+          pgg ~ pggcomp'
+semModel2.2d <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2d)[1:4,]
+
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- 'sacrifice ~ pgg + party_Labour + party_Greens + party_National + party_NZFirst + party_Other
+          # comprehension
+          pgg ~ pggcomp'
+semModel2.2e <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2e)[1:6,]
+
+# nzreg (n = 896)
+d_temp <- d %>% drop_na(nzreg)
+model <- 'sacrifice ~ pgg + nzreg
+          # comprehension
+          pgg ~ pggcomp'
+semModel2.2f <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2f)[1:2,]
+
+# full model (n = 868)
+d_temp <- d %>% drop_na(age, gender, ethnic, party, nzreg)
+model <- 'sacrifice ~ pgg + age + gender + ethnic_Asian + ethnic_Maori + ethnic_Pacific + party_Labour + party_Greens + party_National + party_NZFirst + party_Other + nzreg
+          # comprehension
+          pgg ~ pggcomp'
+semModel2.2g <- sem(model, data = d_temp, ordered = c('sacrifice'))
+# parameterEstimates(semModel2.2g)[1:12,]
+inspect(semModel2.2g, "r2")
+```
+
+This means that the full model accounts for 11% in the variation in sacrifices made for the environment. What accounts for this increase (verses 1% with PGG alone)?
+
+```{r echo = FALSE, message=F, warning=F}
+fig5a <-  
+  tibble(
+    model = c("alone","w/Age","w/Gender","w/Ethn", "w/Party", "w/Edu", "w/All"),
+    r2 = c(inspect(semModel2.2a,"r2")[1],
+           inspect(semModel2.2b,"r2")[1],
+           inspect(semModel2.2c,"r2")[1],
+           inspect(semModel2.2d,"r2")[1],
+           inspect(semModel2.2e,"r2")[1],
+           inspect(semModel2.2f,"r2")[1],
+           inspect(semModel2.2g,"r2")[1])
+  ) %>% 
+  ggplot(aes(x = factor(model, levels = .$model), y = r2)) +
+  geom_bar(stat = "identity", fill = "skyblue4") +
+  scale_y_continuous(limits = c(0, 0.3)) +
+  labs(y = bquote(R^2), x = "Model: Pro-environemntal behaviour")
+
+fig5a
+```
+
+Political party support accounts for the large majority of variance in sacrifice for the environment that the full model explains (11%).
+
+How does the inclusion of various controls affect the significance of the model? 
+
+```{r echo=F}
+estimate <- se <- c()
+for (i in 1:7) {
+  out <- parameterEstimates(get(paste("semModel2.2",letters[i], sep="")))
+  estimate <- c(estimate, out$est[out$lhs=="sacrifice" & out$rhs=="pgg" & out$op=="~"])
+  se <- c(se, out$se[out$lhs=="sacrifice" & out$rhs=="pgg" & out$op=="~"])
+}
+
+fig4a <-
+  tibble(
+    Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity", 
+                  "Party support", "Education", "Full model")),
+                  levels = c("No controls", "Age", "Gender", "Ethnicity", 
+                  "Party support", "Education", "Full model")),
+    Estimate = estimate,
+    ci.lower = estimate + (1.96*se),
+    ci.upper = estimate - (1.96*se)
+  ) %>%
+  
+  ggplot(aes(x = fct_rev(Model), 
+             y = Estimate, 
+             ymin = ci.lower, 
+             ymax = ci.upper)) +
+  geom_pointrange(size = 0.35) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  coord_flip() +
+  xlab(NULL) +
+  ylab("Unstandardised Estimate\n(PGG predicting sacrifice enacted)") +
+  ylim(-0.7,1.7)
+
+fig4a
+
+rm(estimate, se, i, out)
+```
+
+There is less variability as no latent variables are being estimated. Nevertheless, we find the same effect: political party support attenutates the effect of PGG contributions on sacrifice enacted. Again, this suggests that there is some link between PGG and party support. Let's validate this by looking at how PGG responses vary across political parties, and investigating the amount of variance that they explain.
+
+```{r, echo=FALSE,message=F, warning=F}
+d %>%
+  ggplot(aes(x = d$pgg*100)) +
+  geom_histogram() +
+  facet_wrap(.~party) +
+  labs(x = "Public Goods Game contribution")
+
+# regression
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# comprehension
+          pgg ~ pggcomp
+          # regression
+          pgg ~ party_Labour + party_DidNotVote + party_National + party_NZFirst + party_Other'
+semModel2.2h <- sem(model, data = d_temp)
+# parameterEstimates(semModel2.2h)[2:6,]
+inspect(semModel2.2h, "r2")
+```
+
+This means that political party supported accounts for 1% of the variance in PGG. National party supporters gave significantly less in the PGG relative to Green party supporters.
+
+# 3. SEM (Climate Change Belief)
+
+## 3.1. Cooperative phenotype
+
+Next, we want to understand the relationship between an individual's cooperative phenotype and their belief in climate change.
+
+Fit the structural equation model, regressing the climate change belief latent variable onto the cooperative phenotype latent variable.
+
+```{r}
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop'
+
+semModel3.1a <- sem(model, data = d, ordered = c('tg1','sh','real','human','concern'))
+```
+
+How well does this model fit the data?
+
+```{r echo=F}
+fitMeasures(semModel3.1a)["rmsea"] %>% round(2)
+fitMeasures(semModel3.1a)["srmr"]  %>% round(2)
+```
+
+This model fits the data well. How much variance does it account for?
+
+```{r}
+inspect(semModel3.1a, "r2")
+```
+
+This means that the latent variable "cooperative phenotype" accounts for 3% of the variation in the latent varaible "climate change beliefs".
+
+What is the regression coefficient?
+
+```{r echo=F}
+parameterEstimates(semModel3.1a)[14,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+```
+
+There is a significant positive relationship between the two. The standardised estimate will give us a better idea of the size of this effect.
+
+```{r echo=F}
+standardizedSolution(semModel3.1a)[14,]  %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+```
+
+From the standardised parameter, we can say that a 1 SD increase in the cooperative phenotype latent variable leads to a 0.16 SD increase in the climate change belief latent variable.
+
+Get an effect size.
+
+```{r}
+sqrt(inspect(semModel3.1a, "r2")["ccb"]) %>% as.numeric() %>% round(2)
+```
+
+The effect is small.
+
+Plotting will again help with interpretation.
+
+```{r echo=F}
+# add latent variables to dataset
+d$coop_semModel3.1a <- predict(semModel3.1a)[,1]
+d$ccb_semModel3.1a  <- predict(semModel3.1a)[,2]
+
+# plot
+fig1b <-
+  ggplot(d, aes(x = coop_semModel3.1a, y = ccb_semModel3.1a)) +
+  geom_jitter(height = 0.02, width = 0.02, colour = "steelblue", alpha = 0.15) +
+  geom_smooth(method = lm, se = FALSE, colour = "black", size = 0.5) +
+  scale_x_continuous(limits = c(-0.4, 0.4)) +
+  labs(x = "Cooperative Phenotype", y = "Climate Change Belief")
+
+fig1b
+
+# save
+fig1 <- plot_grid(fig1a + theme(axis.title.x = element_blank()), 
+                  fig1b, labels = c("a","b"), ncol = 1, align = "v")
+ggsave("figures/fig1.pdf", fig1, width = 5, height = 6)
+ggsave("figures/fig1.png", fig1, width = 5, height = 6)
+
+# cleanup
+rm(fig1a, fig1b)
+```
+
+Again, we ensure that this finding is robust to various controls, and provide a measure for variance explained.
+
+```{r echo=F}
+# age (n = 896)
+d_temp <- d %>% drop_na(age)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + age'
+semModel3.1b <- sem(model, data = d_temp, ordered = c('tg1','sh','real','human','concern'))
+#parameterEstimates(semModel3.1b)[14:15,]
+
+# gender (n = 896)
+d_temp <- d %>% drop_na(gender)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + gender'
+semModel3.1c <- sem(model, data = d_temp, ordered = c('tg1','sh','real','human','concern'))
+#parameterEstimates(semModel3.1c)[14:15,]
+
+# ethnicity (n = 890)
+d_temp <- d %>% drop_na(ethnic)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + ethnic_Asian + ethnic_Maori + ethnic_Pacific'
+semModel3.1d <- sem(model, data = d_temp, ordered = c('tg1','sh','real','human','concern'))
+#parameterEstimates(semModel3.1d)[14:17,]
+
+# SES (n = 897)
+#d_temp <- d %>% drop_na(secs)
+#model <- '# measurement model
+          #coop =~ pgg + dg + tg1 + tg2 + sh
+          #ccb =~ real + human + concern
+          # comprehension
+          #pgg ~ pggcomp
+          #tg1 + tg2 ~ tgcomp
+          #sh ~ shcomp
+          #dg ~ dgcomp
+          # regression
+          #ccb ~ coop + secs'
+#semModel3.1.1d <- sem(model, data = d_temp, ordered = c('tg1','sh','sacrifice'))
+#parameterEstimates(semModel3.1.1d)[14:15,]
+
+#NB: MODELS ARE ALSO ROBUST TO SES, SO IT IS POLITICAL PARTY SPECIFICALLY THAT ATTENUATES EFFECT, NOT WEALTH
+
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + party_Labour + party_Greens + party_National + party_NZFirst + party_Other'
+semModel3.1e <- sem(model, data = d_temp, ordered = c('tg1','sh','real','human','concern'))
+#parameterEstimates(semModel3.1e)[14:19,]
+
+# nzreg (n = 896)
+d_temp <- d %>% drop_na(nzreg)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + nzreg'
+semModel3.1f <- sem(model, data = d_temp, ordered = c('tg1','sh','real','human','concern'))
+#parameterEstimates(semModel3.1f)[14:15,]
+
+# full model (n = 868)
+d_temp <- d %>% drop_na(age, gender, ethnic, party, nzreg)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + age + gender + ethnic_Asian + ethnic_Maori + ethnic_Pacific + party_Labour + party_Greens + party_National + party_NZFirst + party_Other + nzreg'
+semModel3.1g <- sem(model, data = d_temp, ordered = c('tg1','sh','real','human','concern'))
+#parameterEstimates(semModel3.1g)[14:25,]
+inspect(semModel3.1g, "r2")
+```
+
+This means that the full model accounts for 29% of the variance in climate change beliefs. What accounts for this increase (from 3% with cooperative phenotype alone)?
+
+```{r echo = FALSE, message=F, warning=F}
+fig5b <-  
+  tibble(
+    model = c("alone","w/Age","w/Gender","w/Ethn", "w/Party", "w/Edu", "w/All"),
+    r2 = c(inspect(semModel3.1a,"r2")[9],
+           inspect(semModel3.1b,"r2")[9],
+           inspect(semModel3.1c,"r2")[9],
+           inspect(semModel3.1d,"r2")[9],
+           inspect(semModel3.1e,"r2")[9],
+           inspect(semModel3.1f,"r2")[9],
+           inspect(semModel3.1g,"r2")[9])
+  ) %>% 
+  ggplot(aes(x = factor(model, levels = .$model), y = r2)) +
+  geom_bar(stat = "identity", fill = "skyblue4") +
+  scale_y_continuous(limits = c(0, 0.3)) +
+  labs(y = bquote(R^2), x = "Model: Climate Change Belief")
+
+fig5b 
+
+# save
+fig5 <- plot_grid(fig5a, fig5b + theme(axis.title.y = element_blank()), 
+                  labels = c("a","b"), nrow = 1, align = "vh")
+ggsave("figures/fig5.pdf", fig5, width = 9, height = 4)
+ggsave("figures/fig5.png", fig5, width = 9, height = 4)
+
+rm(fig5a, fig5b)
+```
+
+This shows that political party support is responsable for the majority of the increase in variation in climate change beliefs explained by the full model. Below, we investigate how the slope of cooperative phenotype (the unstandardised parameter) varies across these models.
+
+```{r echo=F}
+estimate <- se <- c()
+for (i in 1:7) {
+  out <- parameterEstimates(get(paste("semModel3.1",letters[i], sep="")))
+  estimate <- c(estimate, out$est[out$lhs=="ccb" & out$rhs=="coop" & out$op=="~"])
+  se <- c(se, out$se[out$lhs=="ccb" & out$rhs=="coop" & out$op=="~"])
+}
+
+fig2b <-
+  tibble(
+    Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity", 
+                  "Party support", "Education", "Full model")),
+                  levels = c("No controls", "Age", "Gender", "Ethnicity", 
+                  "Party support", "Education", "Full model")),
+    Estimate = estimate,
+    ci.lower = estimate + (1.96*se),
+    ci.upper = estimate - (1.96*se)
+  ) %>%
+  
+  ggplot(aes(x = fct_rev(Model), 
+             y = Estimate, 
+             ymin = ci.lower, 
+             ymax = ci.upper)) +
+  geom_pointrange(size = 0.35) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  coord_flip() +
+  xlab(NULL) +
+  ylab("Unstandardised Estimate\n(coop phenotype predicting climate change belief)") +
+  ylim(-0.8,1.9) +
+  theme(axis.text.x = element_text(size = 9))
+
+fig2b
+
+# save
+fig2 <- plot_grid(fig2a, fig2b, labels = c("a","b"), nrow = 1, align = "vh")
+ggsave("figures/fig2.pdf", fig2, width = 9, height = 4)
+ggsave("figures/fig2.png", fig2, width = 9, height = 4)
+
+rm(fig2a, fig2b, estimate, se, i, out)
+```
+
+We find the same pattern of results. The finding is robust to all controls except political party support.
+
+## 3.2. Public Goods Game
+
+As before, we swap out cooperative phenotype for the Public Goods Game, to see if our results hold.
+
+```{r}
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~ pgg
+          # comprehension
+          pgg ~ pggcomp'
+
+semModel3.2a <- sem(model, data = d, ordered = c('real','human','concern'))
+```
+
+How well does this model fit the data?
+
+```{r echo=F}
+fitMeasures(semModel3.2a)["rmsea"] %>% round(2)
+fitMeasures(semModel3.2a)["srmr"] %>% round(2)
+```
+
+This model is a mediocre fit. How much variation does it explain?
+
+```{r}
+inspect(semModel3.2a, "r2")
+```
+
+This means that PGG explains less than 1% of the variance in climate change beliefs.
+
+Do we get the same positive regression coefficient as before?
+
+```{r echo=F}
+parameterEstimates(semModel3.2a)[4,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+```
+
+No. While the effect is still positive, it is smaller and non-significant. What about the standardised parameter?
+
+```{r echo=F}
+standardizedSolution(semModel3.2a)[4,]  %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+```
+
+The standardised parameter is 0.05, and non-significant. 
+
+Get an effect size.
+
+```{r}
+sqrt(inspect(semModel3.2a, "r2")["ccb"]) %>% as.numeric() %>% round(2)
+```
+
+Let's plot this prediction.
+
+```{r echo=F, message=F, warning=F}
+# add latent variables to dataset
+d$ccb_semModel3.2a  <- predict(semModel3.2a)
+
+# plot
+fig3b <-
+  d %>%
+  mutate(cut = cut(pgg*100, 11)) %>%
+  ggplot(aes(x = cut, y = ccb_semModel3.1a)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(x = (pgg*10)+1), height = 0.3, width = 0.2, colour = "darkseagreen4", alpha = 0.3) +
+  labs(x = "Contribution in\nPublic Goods Game (points)", y = "Climate Change Belief") +
+  scale_x_discrete(labels = seq(0, 100, length.out = 11))
+
+fig3b
+
+# save 
+fig3 <- plot_grid(fig3a + theme(axis.title.x = element_blank()), 
+                  fig3b, labels = c("a","b"), ncol = 1, align = "v")
+ggsave("figures/fig3.pdf", fig3, width = 5, height = 6)
+ggsave("figures/fig3.png", fig3, width = 5, height = 6)
+
+# cleanup
+rm(fig3a, fig3b)
+```
+
+And we introduce controls again, providing a measure of the variance explained by the full model.
+
+```{r echo=F}
+# age (n = 896)
+d_temp <- d %>% drop_na(age)
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~ pgg + age
+          # comprehension
+          pgg ~ pggcomp'
+semModel3.2b <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+# parameterEstimates(semModel3.2b)[4:5,]
+
+# gender (n = 896)
+d_temp <- d %>% drop_na(gender)
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~ pgg + gender
+          # comprehension
+          pgg ~ pggcomp'
+semModel3.2c <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+# parameterEstimates(semModel3.2c)[4:5,]
+
+# ethnicity (n = 890)
+d_temp <- d %>% drop_na(ethnic)
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~  pgg + ethnic_Asian + ethnic_Maori + ethnic_Pacific'
+semModel3.2d <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+# parameterEstimates(semModel3.2d)[4:7,]
+
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~ pgg + party_Labour + party_Greens + party_National + party_NZFirst + party_Other
+          # comprehension
+          pgg ~ pggcomp'
+semModel3.2e <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+# parameterEstimates(semModel3.2e)[4:9,]
+
+# nzreg (n = 896)
+d_temp <- d %>% drop_na(nzreg)
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~ pgg + nzreg
+          # comprehension
+          pgg ~ pggcomp'
+semModel3.2f <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+# parameterEstimates(semModel3.2f)[4:5,]
+
+# full model (n = 554)
+d_temp <- d %>% drop_na(age, gender, ethnic, party, nzreg)
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~ pgg + age + gender + ethnic_Asian + ethnic_Maori + ethnic_Pacific + party_Labour + party_Greens + party_National + party_NZFirst + party_Other + nzreg
+          # comprehension
+          pgg ~ pggcomp'
+semModel3.2g <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+# parameterEstimates(semModel3.2g)[4:15,]
+inspect(semModel3.2g, "r2")
+```
+
+This means that the full model accounts for 28% of the variance in the latent variable "climate change beliefs".
+
+```{r echo=F}
+estimate <- se <- c()
+for (i in 1:7) {
+  out <- parameterEstimates(get(paste("semModel3.2",letters[i], sep="")))
+  estimate <- c(estimate, out$est[out$lhs=="ccb" & out$rhs=="pgg" & out$op=="~"])
+  se <- c(se, out$se[out$lhs=="ccb" & out$rhs=="pgg" & out$op=="~"])
+}
+
+fig4b <-
+  tibble(
+    Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity", 
+                  "Party support", "Education", "Full model")),
+                  levels = c("No controls", "Age", "Gender", "Ethnicity", 
+                  "Party support", "Education", "Full model")),
+    Estimate = estimate,
+    ci.lower = estimate + (1.96*se),
+    ci.upper = estimate - (1.96*se)
+  ) %>%
+  
+  ggplot(aes(x = fct_rev(Model), 
+             y = Estimate, 
+             ymin = ci.lower, 
+             ymax = ci.upper)) +
+  geom_pointrange(size = 0.35) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  coord_flip() +
+  xlab(NULL) +
+  ylab("Unstandardised Estimate\n(PGG predicting climate change beliefs)") +
+  ylim(-0.7,1.6) +
+  theme(axis.text.x = element_text(size = 9))
+
+fig4b
+
+# save
+fig4 <- plot_grid(fig4a, fig4b, labels = c("a","b"), nrow = 1, align = "vh")
+ggsave("figures/fig4.pdf", fig4, width = 9, height = 4)
+ggsave("figures/fig4.png", fig4, width = 9, height = 4)
+
+rm(fig4a, fig4b, estimate, se, i, out)
+```
+
+This differs from our results for the cooperative phenotype. None of the models are signficant.
+
+# 4. Mediation
+
+## 4.1. Cooperative phenotype
+
+We fit a full mediation model, where environmental sacrifice enacted mediates the relationship between the cooperative phenotype and climate change beliefs. This is a motivated reasoning model: we predict that high levels of cooperative phenotype encourage environmental sacrifice, which then leads people to justify that behaviour with their beliefs in climate change. As such, we predict a full mediation effect - the direct path from cooperative phenotype to climate change belief will be removed when including the indirect path through environmental sacrifice.
+
+```{r}
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + sacrifice
+          sacrifice ~ coop'
+
+semModel4.1a <- sem(model, data = d, ordered = c('tg1','sh','real','human',
+                                                 'concern','sacrifice'))
+```
+
+This model has a little trouble fitting, likely because of its complexity.
+
+How well does this model fit the data?
+
+```{r echo=F}
+fitMeasures(semModel4.1a)["rmsea"] %>% round(2)
+fitMeasures(semModel4.1a)["srmr"] %>% round(2)
+```
+
+This model has a good fit to the data. How much variance does it account for?
+
+```{r}
+inspect(semModel4.1a, "r2")
+```
+
+This means that the model account for 1% of the variation in sacrifice enacted, and 21% of the variation in climate change beliefs.
+
+We can visualise this model as a path diagram with unstandardised estimates.
+
+```{r echo=F, message=F, warning=F}
+# publication quality path diagram
+# modified from https://rpubs.com/tjmahr/sem_diagrammer
+
+# To describe edges, we need the origin, path-type, endpoint, and label.
+paths <- semModel4.1a %>%
+  parameterEstimates %>%
+  select(lhs, op, rhs, est, pvalue)
+
+# Latent variables are left-hand side of "=~" lines
+latent <- paths %>%
+  filter(op == "=~") %>%
+  select(label = lhs) %>%
+  distinct %>%
+  rownames_to_column(var = "id") %>%
+  mutate(type = NA, shape = "circle") %>%
+  select(id, type, label, shape)
+
+# Manifest variables are not latent variables
+`%not_in%` <- Negate(`%in%`)
+manifest <- paths %>%
+  filter(op != "~1", lhs %not_in% latent$label) %>%
+  select(label = lhs) %>%
+  distinct %>%
+  rownames_to_column(var = "id") %>%
+  mutate(type = NA, shape = "square") %>%
+  select(id, type, label, shape)
+
+# Nodes are prepared
+node_set <- 
+  combine_ndfs(latent, manifest) %>%
+  mutate(x = c(3, 5, 2, 2, 2, 2, 2, 4, 6, 6, 6, 1, 1, 1, 1),
+         y = c(3, 3, 1.4, 2.2, 3, 3.8, 4.6, 4, 2.2, 3, 3.8, 1.4, 2.6, 3.8, 4.6))
+
+# Edges will be labeled by the parameter estimates
+all_paths <- paths %>%
+  filter(op != "~1") %>%
+  mutate(label = paste0(format(round(est, 2), nsmall = 2),
+                        ifelse(!is.na(pvalue) & pvalue<0.05,"*",""), sep = "")) %>%
+  select(-est)
+
+# Factor loadings are the paths in the "=~" lines
+nodes <- node_set[,"label"] 
+loadings <- all_paths %>%
+  filter(op == "=~") %>%
+  mutate(from = as.vector(sapply(lhs, function(x) which(nodes == x))), 
+         to   = as.vector(sapply(rhs, function(x) which(nodes == x))), 
+         style = "dashed", rel = NA, value = NA) %>%
+  rownames_to_column(var = "id") %>%
+  select(id, from, to, rel, style, label, value)
+
+# Regressions are the paths in the "~" lines
+regressions <- all_paths %>%
+  filter(op == "~") %>%
+  mutate(to = as.vector(sapply(lhs, function(x) which(nodes == x))), 
+         from   = as.vector(sapply(rhs, function(x) which(nodes == x))), 
+         style = "solid", rel = NA, value = NA) %>%
+  rownames_to_column(var = "id") %>%
+  select(id, from, to, rel, style, label, value)
+
+edge_set <- combine_edfs(loadings, regressions)
+
+# Combine edges and nodes
+fig6 <- create_graph(
+  nodes_df = node_set,
+  edges_df = edge_set)
+
+# change attributes
+fig6$global_attrs <-
+  fig6$global_attrs %>%
+  mutate(value = ifelse(attr == "fontname", "Arial", value)) %>%
+  mutate(value = ifelse(attr == "fillcolor", "white", value)) %>%  
+  mutate(value = ifelse(attr == "color" & attr_type == "node", "black", value)) %>%
+  mutate(value = ifelse(attr == "fontcolor" & attr_type == "node", "black", value))
+  
+render_graph(fig6)
+
+# save to file
+export_graph(fig6, file_name = "figures/fig6.pdf")
+export_graph(fig6, file_name = "figures/fig6.png")
+
+# cleanup
+rm(all_paths, edge_set, latent, loadings, manifest, 
+   node_set, paths, regressions, nodes)
+```
+
+Here we calculate standardised estimates for both paths.
+```{r echo=F}
+standardizedSolution(semModel4.1a)[14:16,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+```
+...and unstandardised estimates (due to the cummulative link ordinal regression nature of our Likert scale data).
+
+```{r echo=F}
+parameterEstimates(semModel4.1a)[14:16,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+```
+How big are the effect sizes?
+
+```{r}
+sqrt(inspect(semModel4.1a, "r2"))
+```
+The effect size of cooperative phenotype on enviornmental sacrifice is small (r = 0.10), and the combined effect of cooperative phenotype and environmental sacrifice on climate change belief is moderate (0.46). 
+
+These coefficients suggest a *partial* mediation effect. Including environmental sacrifice as a mediator decreases the standardised parameter from the direct path (from 0.16 to 0.12). However, it remains positive and significant. The indirect path is also positive and significant. So some, but not all, of the effect of cooperative phenotype on climate change belief is explained by the mediation.
+
+We show in the code (hidden here) that this partial mediation effect remains after controlling for all factors, except political party support. When including party support, the paths from the cooperative phenotype to environmental sacrifice, and from the cooperative phenotype to climate change belief are both attenuated. How much variation does the full model account for?
+
+```{r echo=F, warning=F, message=F}
+# age (n = 896)
+d_temp <- d %>% drop_na(age)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + sacrifice + age
+          sacrifice ~ coop + age'
+semModel4.1b <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1b)[14:18,]
+
+# gender (n = 896)
+d_temp <- d %>% drop_na(gender)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + sacrifice + gender
+          sacrifice ~ coop + gender'
+semModel4.1c <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1c)[14:18,]
+
+# ethnicity (n = 890)
+d_temp <- d %>% drop_na(ethnic)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + sacrifice + ethnic_Asian + ethnic_Maori + ethnic_Pacific
+          sacrifice ~ coop  + ethnic_Asian + ethnic_Maori + ethnic_Pacific'
+semModel4.1d <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1d)[14:22,]
+
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + sacrifice + party_Labour + party_Greens + party_National + party_NZFirst + party_Other
+          sacrifice ~ coop  + party_Labour + party_Greens + party_National + party_NZFirst + party_Other'
+semModel4.1e <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1e)[14:26,]
+
+# nzreg (n = 896)
+d_temp <- d %>% drop_na(nzreg)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + sacrifice + nzreg
+          sacrifice ~ coop + nzreg'
+semModel4.1f <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1f)[14:18,]
+
+# full model (n = 868)
+d_temp <- d %>% drop_na(age, gender, ethnic, party, nzreg)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + sacrifice + age + gender + ethnic_Asian + ethnic_Maori + ethnic_Pacific + party_Labour + party_Greens + party_National + party_NZFirst + party_Other + nzreg
+          sacrifice ~ coop + age + gender + ethnic_Asian + ethnic_Maori + ethnic_Pacific + party_Labour + party_Greens + party_National + party_NZFirst + party_Other + nzreg'
+semModel4.1g <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1g)[14:38,]
+inspect(semModel4.1g, "r2")
+```
+
+This means that our full model accounts for 11% of the variance in sacrifice enacted, and 38% of the variance in climate change beliefs.
+
+We compare this mediation model to a model with the two climate change outcomes (sacrifice enacted and belief) switched.
+
+```{r}
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          sacrifice ~ coop + ccb
+          ccb ~ coop'
+
+semModel4.1h <- sem(model, data = d, ordered = c('tg1','sh','real',
+                                                 'human','concern','sacrifice'))
+
+parameterEstimates(semModel4.1h)[14:16,]
+```
+
+This is a full mediation effect. Let's compare the standardised estimates.
+
+```{r echo=F}
+standardizedSolution(semModel4.1h)[14:16,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+```
+
+
+
+How well does this model fit?
+
+```{r}
+fitMeasures(semModel4.1h)["rmsea"] %>% round(2)
+fitMeasures(semModel4.1h)["srmr"] %>% round(2)
+```
+
+The model is a good fit. How much variation does it account for?
+
+```{r}
+inspect(semModel4.1h, "r2")
+```
+
+This means that this model accounts for 20% of the variation in sacrifice enacted, and 3% of the variation in climate change beliefs.
+
+Overall, the significance of both alternative mediation pathways suggests a feedback model, where all the variables are interacting with each another. However, due to the single time slice nature of our data, we are unable to make causal claims.
+
+## 4.2. Public Goods Game
+
+As we failed to find a significant effect for the direct path from PGG to climate change belief, we are unable to explore our hypothesised mediation for this relationship.
+
+# 5. Variance explained by other demographics
+
+In this additional section, we explore the variance in sacrifice explained by our control variables in comparison to both cooperative phenotype alone and the full model.
+
+```{r echo = F}
+#building models for each of the control variables
+# age (n = 896)
+d_temp <- d %>% drop_na(age)
+model <- 'sacrifice ~ age'
+semModel2.1.1a <- sem(model, data = d_temp, ordered = c('sacrifice'))
+
+# gender (n = 896)
+d_temp <- d %>% drop_na(gender)
+model <- 'sacrifice ~ gender'
+semModel2.1.1b <- sem(model, data = d_temp, ordered = c('sacrifice'))
+
+# ethnicity (n = 890)
+d_temp <- d %>% drop_na(ethnic)
+model <- 'sacrifice ~ ethnic_Asian + ethnic_Maori + ethnic_Pacific'
+semModel2.1.1c <- sem(model, data = d_temp, ordered = c('sacrifice'))
+
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- 'sacrifice ~ party_Labour + party_Greens + party_National + party_NZFirst + party_Other'
+semModel2.1.1d <- sem(model, data = d_temp, ordered = c('sacrifice'))
+
+# nzreg (n = 896)
+d_temp <- d %>% drop_na(nzreg)
+model <- 'sacrifice ~ nzreg'
+semModel2.1.1e <- sem(model, data = d_temp, ordered = c('sacrifice'))
+
+#building the graph
+fig5c <-  
+  tibble(
+    model = c("coop","age","gender","ethn", "party", "edu", "full"),
+    r2 = c(inspect(semModel2.1a,"r2")[6],
+           inspect(semModel2.1.1a, "r2"),
+           inspect(semModel2.1.1b, "r2"),
+           inspect(semModel2.1.1c, "r2"),
+           inspect(semModel2.1.1d, "r2"),
+           inspect(semModel2.1.1e, "r2"),
+           inspect(semModel2.1g,"r2")[6])
+  ) %>% 
+  ggplot(aes(x = factor(model, levels = .$model), y = r2)) +
+  geom_bar(stat = "identity", fill = "skyblue4") +
+  scale_y_continuous(limits = c(0, 0.3)) +
+  labs(y = bquote(R^2), x = "pro-environmental behaviour")
+
+fig5c 
+
+```
+
+This shows that cooperative phenotype explains a similar amount of the variance in pro-environmental behaviour as ethnicity, and education. Interestingly, it explains more vairance than age.
+
+Below, we investigate the same comparisons with our latent climate change belief variable.
+
+```{r echo = F}
+#building models for each of the control variables
+# age (n = 896)
+d_temp <- d %>% drop_na(age)
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~ age'
+semModel3.1.1a <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+
+# gender (n = 896)
+d_temp <- d %>% drop_na(gender)
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~ gender'
+semModel3.1.1b <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+
+# ethnicity (n = 890)
+d_temp <- d %>% drop_na(ethnic)
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~ ethnic_Asian + ethnic_Maori + ethnic_Pacific'
+semModel3.1.1c <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~ party_Labour + party_Greens + party_National + party_NZFirst + party_Other'
+semModel3.1.1d <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+
+# nzreg (n = 896)
+d_temp <- d %>% drop_na(nzreg)
+model <- '# measurement model
+          ccb =~ real + human + concern
+          # regression
+          ccb ~ nzreg'
+semModel3.1.1e <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+
+#building the graph
+fig5d <-  
+  tibble(
+    model = c("coop","age","gender","ethn", "party", "edu", "full"),
+    r2 = c(inspect(semModel3.1a,"r2")[9],
+           inspect(semModel3.1.1a, "r2")[4],
+           inspect(semModel3.1.1b, "r2")[4],
+           inspect(semModel3.1.1c, "r2")[4],
+           inspect(semModel3.1.1d, "r2")[4],
+           inspect(semModel3.1.1e, "r2")[4],
+           inspect(semModel3.1g,"r2")[9])
+  ) %>% 
+  ggplot(aes(x = factor(model, levels = .$model), y = r2)) +
+  geom_bar(stat = "identity", fill = "skyblue4") +
+  scale_y_continuous(limits = c(0, 0.3)) +
+  labs(y = bquote(R^2), x = "climate change belief")
+
+fig5d 
+
+# save
+fig5_1 <- plot_grid(fig5c, fig5d + theme(axis.title.y = element_blank()), 
+                  labels = c("a","b"), nrow = 1, align = "vh")
+ggsave("figures/fig5_1.pdf", fig5_1, width = 9, height = 4)
+ggsave("figures/fig5_1.png", fig5_1, width = 9, height = 4)
+
+rm(fig5c, fig5d)
+```
+
+This shows that age accounts for 3% of the varation in climate change belief, and that gender accounts for 1% of the variation in climate change belief. Similarly, ethnicity, and education account for 1% and 8% of the variation in climate change belief respectively, while party accounts for 24%. This is comparable to the respective variance in climate change belief explained by cooperative phenotype alone (3%). 
+
+# 6. Generating some basic graphs of initial variables
+
+```{r, echo= FALSE, message=F, warning=F}
+fig8a <- 
+  ggplot(d, aes(x = real)) +
+  geom_bar(fill = "green4") +
+  labs(x = "Climate change is real", y = "Frequency") +
+  scale_x_continuous(breaks = 1:7)
+
+fig8b <- 
+  ggplot(d, aes(x = human)) +
+  geom_bar(fill = "blue4") +
+  labs(x = "Climate change is caused by humans", y = "Frequency") +
+  scale_x_continuous(breaks = 1:7)
+  
+fig8c <- 
+  ggplot(d, aes(x = concern)) +
+  geom_bar(fill = "red4") +
+  labs(x = "I am deeply concerned about climate change", y = "Frequency") +
+  scale_x_continuous(breaks = 1:7)
+
+fig8d <- 
+  ggplot(d, aes(x = sacrifice)) +
+  geom_bar(fill = "purple4") +
+  labs(x = "Have you made sacrifices to your standard of living\nin order to protect the environment?", y = "Frequency") +
+  scale_x_continuous(breaks = 1:7)
+
+fig8a
+fig8b
+fig8c
+fig8d
+
+# save
+fig8 <- plot_grid(fig8a, fig8b, fig8c, fig8d,
+                  labels = c("a","b","c","d"), 
+                  nrow = 2, ncol = 2, align = "vh")
+ggsave("figures/fig8.pdf", fig8, width = 8, height = 6)
+ggsave("figures/fig8.png", fig8, width = 8, height = 6)
+
+# cleanup
+rm(fig8a, fig8b, fig8c, fig8d)
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
