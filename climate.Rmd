@@ -547,7 +547,11 @@ model <- '# measurement model
           # regression
           coop ~ party_Labour + party_DidNotVote + party_National + party_NZFirst + party_Other'
 semModel2.1h <- sem(model, data = d_temp, ordered = c('tg1','sh'))
-#parameterEstimates(semModel2.1h)[10:14,]
+
+parameterEstimates(semModel2.1h)[11:15,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+
 inspect(semModel2.1h, "r2")
 ```
 
@@ -1100,15 +1104,17 @@ fig3b <-
   geom_pointrange(size = 0.35) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   coord_flip() +
-  xlab(NULL) +
+  xlab("") +
   ylab("Unstandardised Estimate\n(Cooperative Phenotype predicting\nClimate Change Belief)") +
   scale_y_continuous(breaks = seq(-0.5, 2, by = 0.5), limits = c(-0.5, 2))
 
 fig3b
 
 # save
-fig3 <- plot_grid(fig3a, fig3b, labels = c("a","b"), nrow = 1, align = "vh")
-ggsave("figures/fig3.pdf", fig3, width = 9, height = 4)
+fig3b <- fig3b + theme(axis.text.y = element_blank(),
+                       axis.ticks.y = element_blank())
+fig3 <- plot_grid(fig3a, fig3b, labels = c("a","b"), nrow = 1, rel_widths = c(1, 0.875))
+ggsave("figures/fig3.pdf", fig3, width = 7.5, height = 4)
 
 # cleanup
 rm(fig3a, fig3b, estimate, se, i, out)
@@ -1330,8 +1336,8 @@ semModel4.1a <- sem(model, data = d, ordered = c('tg1','sh','real','human',
 How well does this model fit the data?
 
 ```{r echo=F}
-fitMeasures(semModel4.1a)["rmsea"] %>% round(2)
-fitMeasures(semModel4.1a)["srmr"] %>% round(2)
+fitMeasures(semModel4.1a)["rmsea"] %>% round(3)
+fitMeasures(semModel4.1a)["srmr"] %>% round(3)
 ```
 
 This model has a good fit to the data. How much variance does it account for?
@@ -1425,15 +1431,7 @@ rm(all_paths, edge_set, latent, loadings, manifest,
    node_set, paths, regressions, nodes, fig, model, `%not_in%`)
 ```
 
-Here we calculate standardised estimates for both paths.
-
-```{r echo=F}
-standardizedSolution(semModel4.1a)[14:16,] %>%
-  mutate_if(is.numeric, round, 2) %>%
-  kable() %>% kable_styling(full_width = FALSE)
-```
-
-...and unstandardised estimates (due to the cummulative link ordinal regression nature of our Likert scale data).
+Here we calculate understandardised estimates.
 
 ```{r echo=F}
 parameterEstimates(semModel4.1a)[14:16,] %>%
@@ -1441,9 +1439,9 @@ parameterEstimates(semModel4.1a)[14:16,] %>%
   kable() %>% kable_styling(full_width = FALSE)
 ```
 
-These coefficients suggest a *partial* mediation effect. Including environmental sacrifice as a mediator decreases the standardised parameter from the direct path (from 0.16 to 0.12). However, it remains positive and significant. The indirect path is also positive and significant. So some, but not all, of the effect of cooperative phenotype on climate change belief is explained by the mediation.
+These coefficients suggest a *partial* mediation effect. Including environmental sacrifice as a mediator decreases the unstandardised parameter from the direct path. However, it remains positive and significant. The indirect path is also positive and significant. So some, but not all, of the effect of cooperative phenotype on climate change belief is explained by the mediation.
 
-We show in the code (hidden here) that this partial mediation effect remains after controlling for all factors, except political party support. When including party support, the paths from the cooperative phenotype to environmental sacrifice, and from the cooperative phenotype to climate change belief are both attenuated. How much variation does the full model account for?
+In the code (hidden here), we show that this partial mediation effect remains after controlling for all factors, except political party support. When including party support, the path from the cooperative phenotype to climate change belief is attenuated.
 
 ```{r echo=F, warning=F, message=F}
 # age (n = 896)
@@ -1547,6 +1545,11 @@ model <- '# measurement model
 semModel4.1g <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
                                                       'human','concern','sacrifice'))
 # parameterEstimates(semModel4.1g)[14:38,]
+```
+
+How much variation does the full model account for?
+
+```{r echo=F}
 inspect(semModel4.1g, "r2")
 ```
 
@@ -1569,25 +1572,13 @@ model <- '# measurement model
 
 semModel4.1h <- sem(model, data = d, ordered = c('tg1','sh','real',
                                                  'human','concern','sacrifice'))
-
-parameterEstimates(semModel4.1h)[14:16,] %>%
-  mutate_if(is.numeric, round, 2) %>%
-  kable() %>% kable_styling(full_width = FALSE)
-```
-
-This is a full mediation effect. Let's compare the standardised estimates.
-
-```{r echo=F}
-standardizedSolution(semModel4.1h)[14:16,] %>%
-  mutate_if(is.numeric, round, 2) %>%
-  kable() %>% kable_styling(full_width = FALSE)
 ```
 
 How well does this model fit?
 
 ```{r echo=F}
-fitMeasures(semModel4.1h)["rmsea"] %>% round(2)
-fitMeasures(semModel4.1h)["srmr"] %>% round(2)
+fitMeasures(semModel4.1h)["rmsea"] %>% round(3)
+fitMeasures(semModel4.1h)["srmr"] %>% round(3)
 ```
 
 The model is a good fit. How much variation does it account for?
@@ -1596,9 +1587,202 @@ The model is a good fit. How much variation does it account for?
 inspect(semModel4.1h, "r2")
 ```
 
-This means that this model accounts for 20% of the variation in sacrifice enacted, and 3% of the variation in climate change beliefs.
+This means that this model accounts for 20% of the variation in sacrifice enacted, and 3% of the variation in climate change belief.
 
-Overall, the significance of both alternative mediation pathways suggests a feedback model, where all the variables are interacting with each another. However, due to the single time slice nature of our data, we are unable to make causal claims.
+We can visualise this model as a path diagram with unstandardised estimates.
+
+```{r echo=F, message=F, warning=F}
+# modified from https://rpubs.com/tjmahr/sem_diagrammer
+
+# To describe edges, we need the origin, path-type, endpoint, and label.
+paths <- semModel4.1h %>%
+  parameterEstimates %>%
+  select(lhs, op, rhs, est, pvalue)
+
+# Latent variables are left-hand side of "=~" lines
+latent <- paths %>%
+  filter(op == "=~") %>%
+  select(label = lhs) %>%
+  distinct %>%
+  rownames_to_column(var = "id") %>%
+  mutate(type = NA, shape = "circle") %>%
+  select(id, type, label, shape)
+
+# Manifest variables are not latent variables
+`%not_in%` <- Negate(`%in%`)
+manifest <- paths %>%
+  filter(op != "~1", lhs %not_in% latent$label) %>%
+  select(label = lhs) %>%
+  distinct %>%
+  rownames_to_column(var = "id") %>%
+  mutate(type = NA, shape = "square") %>%
+  select(id, type, label, shape)
+
+# Nodes are prepared
+node_set <- 
+  combine_ndfs(latent, manifest) %>%
+  mutate(x = c(3, 4, 2, 2, 2, 2, 2, 5, 3.25, 4, 4.75, 1, 1, 1, 1),
+         y = c(3, 4, 1.4, 2.2, 3, 3.8, 4.6, 3, 5, 5, 5, 1.4, 2.6, 3.8, 4.6))
+
+# Edges will be labeled by the parameter estimates
+all_paths <- paths %>%
+  filter(op != "~1") %>%
+  mutate(label = paste0(format(round(est, 2), nsmall = 2),
+                        ifelse(!is.na(pvalue) & pvalue<0.05,"*",""), sep = "")) %>%
+  select(-est)
+
+# Factor loadings are the paths in the "=~" lines
+nodes <- node_set[,"label"] 
+loadings <- all_paths %>%
+  filter(op == "=~") %>%
+  mutate(from = as.vector(sapply(lhs, function(x) which(nodes == x))), 
+         to   = as.vector(sapply(rhs, function(x) which(nodes == x))), 
+         style = "dashed", rel = NA, value = NA) %>%
+  rownames_to_column(var = "id") %>%
+  select(id, from, to, rel, style, label, value)
+
+# Regressions are the paths in the "~" lines
+regressions <- all_paths %>%
+  filter(op == "~") %>%
+  mutate(to = as.vector(sapply(lhs, function(x) which(nodes == x))), 
+         from   = as.vector(sapply(rhs, function(x) which(nodes == x))), 
+         style = "solid", rel = NA, value = NA) %>%
+  rownames_to_column(var = "id") %>%
+  select(id, from, to, rel, style, label, value)
+
+edge_set <- combine_edfs(loadings, regressions)
+
+# Combine edges and nodes
+fig <- create_graph(
+  nodes_df = node_set,
+  edges_df = edge_set)
+
+# change attributes
+fig$global_attrs <-
+  fig$global_attrs %>%
+  mutate(value = ifelse(attr == "fontname", "Arial", value)) %>%
+  mutate(value = ifelse(attr == "fillcolor", "white", value)) %>%  
+  mutate(value = ifelse(attr == "color" & attr_type == "node", "black", value)) %>%
+  mutate(value = ifelse(attr == "fontcolor" & attr_type == "node", "black", value))
+  
+render_graph(fig)
+
+# cleanup
+rm(all_paths, edge_set, latent, loadings, manifest, 
+   node_set, paths, regressions, nodes, fig, model, `%not_in%`)
+```
+
+```{r echo=F}
+parameterEstimates(semModel4.1h)[14:16,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+```
+
+This is a full mediation effect. In the code (hidden here), We show that this full mediation effect remains after controlling for all factors except political party support.
+
+```{r echo=F, warning=F, message=F}
+# age (n = 896)
+d_temp <- d %>% drop_na(age)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + age
+          sacrifice ~ ccb + coop + age'
+semModel4.1i <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1i)[14:18,]
+
+# gender (n = 896)
+d_temp <- d %>% drop_na(gender)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + gender
+          sacrifice ~ ccb + coop + gender'
+semModel4.1j <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1j)[14:18,]
+
+# ethnicity (n = 890)
+d_temp <- d %>% drop_na(ethnic)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + ethnic_Asian + ethnic_Maori + ethnic_Pacific
+          sacrifice ~ ccb + coop  + ethnic_Asian + ethnic_Maori + ethnic_Pacific'
+semModel4.1k <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1k)[14:22,]
+
+# party support (n = 877)
+d_temp <- d %>% drop_na(party)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + party_Labour + party_Greens + party_National + party_NZFirst + party_Other
+          sacrifice ~ ccb + coop + party_Labour + party_Greens + party_National + party_NZFirst + party_Other'
+semModel4.1l <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1l)[14:26,]
+
+# nzreg (n = 896)
+d_temp <- d %>% drop_na(nzreg)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + nzreg
+          sacrifice ~ ccb + coop + nzreg'
+semModel4.1m <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1m)[14:18,]
+
+# full model (n = 868)
+d_temp <- d %>% drop_na(age, gender, ethnic, party, nzreg)
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          ccb =~ real + human + concern
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          ccb ~ coop + age + gender + ethnic_Asian + ethnic_Maori + ethnic_Pacific + party_Labour + party_Greens + party_National + party_NZFirst + party_Other + nzreg
+          sacrifice ~ ccb + coop + age + gender + ethnic_Asian + ethnic_Maori + ethnic_Pacific + party_Labour + party_Greens + party_National + party_NZFirst + party_Other + nzreg'
+semModel4.1n <- sem(model, data = d_temp, ordered = c('tg1','sh','real',
+                                                      'human','concern','sacrifice'))
+# parameterEstimates(semModel4.1n)[14:38,]
+```
 
 ```{r echo=F}
 # cleanup
