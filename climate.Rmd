@@ -1,5 +1,5 @@
 ---
-title: "Climate Change & Cooperative Phenotype - Analyses controlling for comprehension"
+title: "Climate Change & Cooperative Phenotype"
 author: Dan Kelly and Scott Claessens
 date: "`r format(Sys.Date())`"
 output:
@@ -10,7 +10,7 @@ output:
     toc_float: true
 ---
 
-The purpose of this document is to report the further analyses for the climate change project, controlling for comprehension.
+The purpose of this document is to report analyses for [this pre-registered climate change project](https://osf.io/d8t46/).
 
 The analyses proceed as follows:
 
@@ -148,11 +148,12 @@ d <-
          sppcomp = ifelse(sppcomp == 2, 1, 0),
          shpcomp = ifelse(shpcomp == 3, 1, 0))
 ```
+
 Display sample characteristics.
 
 ```{r echo=F, warning=F, message=F}
 # age
-fig01a <-
+fig_a <-
   d %>%
   drop_na(age) %>%
   ggplot(aes(x = age)) +
@@ -162,7 +163,7 @@ fig01a <-
   theme_classic()
 
 # gender
-fig01b <-
+fig_b <-
   d %>%
   drop_na(gender) %>%
   mutate(gender = factor(ifelse(gender == 0, "F", "M"))) %>%
@@ -173,7 +174,7 @@ fig01b <-
   theme_classic()
 
 # ethnicity
-fig01c <-
+fig_c <-
   d %>%
   drop_na(ethnic) %>%
   mutate(ethnic = factor(
@@ -185,7 +186,7 @@ fig01c <-
   theme_classic()
 
 # education
-fig01d <-
+fig_d <-
   d %>%
   drop_na(nzreg) %>%
   ggplot(aes(x = nzreg)) +
@@ -201,16 +202,15 @@ layout <-
         c(3, 3, 4, 4))
 y.grob <- textGrob("        Frequency", 
                    gp = gpar(col = "black", fontsize = 12), rot = 90)
-fig01 <- 
-  arrangeGrob(fig01a, fig01b,
-               fig01c, fig01d, layout_matrix = layout)
-fig01 <- arrangeGrob(fig01, left = y.grob)
+fig <- 
+  arrangeGrob(fig_a, fig_b,
+              fig_c, fig_d, layout_matrix = layout)
+fig <- arrangeGrob(fig, left = y.grob)
 
-# save for publication
-ggsave("figures/fig01.pdf", fig01, width = 22, height = 15, units = "cm")
-ggsave("figures/fig01.png", fig01, width = 22, height = 15, units = "cm")
+ggdraw(fig)
 
-ggdraw(fig01)
+# cleanup
+rm(fig, fig_a, fig_b, fig_c, fig_d, layout, y.grob)
 ```
 
 Get correlation matrix for games and climate change measures.
@@ -262,6 +262,11 @@ inspect(cfaModel1.1, "r2")
 
 This means that our latent variable "cooperative phenotype" accounts for 18% of the variation in PGG, 27% of the variation in DG, 52% of the variation in TG1, 24% of the variation in TG2, and 34% of the variation in SH.
 
+```{r echo=F}
+# cleanup
+rm(model)
+```
+
 ## 1.2. Climate change belief
 
 Cronbach's alpha for climate change belief.
@@ -292,6 +297,11 @@ inspect(cfaModel1.2, "r2")
 ```
 
 This means that our latent variable "climate change belief" accounts for 79% of the variation in responses to whether climate change is real, 78% of the variation in responses to whether it is caused by humans, and 74% of the variation in responses to whether participants were concerned about it.
+
+```{r echo=F}
+# cleanup
+rm(model)
+```
 
 # 2. SEM (Environmental Sacrifice Enacted)
 
@@ -348,23 +358,26 @@ sqrt(inspect(semModel2.1a, "r2")["sacrifice"]) %>% as.numeric() %>% round(2)
 
 This suggests a small effect size.
 
-This relationship is easier to see if we directly plot these predictions. Below, the regression line is the change in mean score of environmental sacrifice enacted (1-7) with each unit change in the cooperation factor.
+This relationship is easier to see if we directly plot the data.
 
 ```{r echo=F, warning=F, message=F}
 # add coop to dataframe
 d$coop_semModel2.1a <- predict(semModel2.1a)
 
-fig1a <-
+fig1 <-
   ggplot(d, aes(x = sacrifice, y = coop_semModel2.1a, group = sacrifice)) +
   geom_boxplot(outlier.shape = NA) +
-  geom_jitter(height = 0.02, width = 0.3, colour = "steelblue", alpha = 0.15) +
+  geom_jitter(height = 0.02, width = 0.2, colour = "steelblue", alpha = 0.15) +
   coord_flip() +
   scale_x_continuous(breaks = 1:7) +
-  scale_y_continuous(limits = c(-0.4, 0.4)) +
-  labs(y = "Cooperative Phenotype", x = "Have you made sacrifices to your\nstandard of living in order to\nprotect the environment? (1-7)") +
+  labs(y = "Cooperative Phenotype (factor score)", 
+       x = "Have you made sacrifices to your\nstandard of living in order to\nprotect the environment? (1-7)") +
   theme(axis.title.y = element_text(size = 11))
 
-fig1a
+fig1
+
+# save for publication
+ggsave(fig1, file = "figures/fig1.pdf", width = 6, height = 5)
 ```
 
 This plot suggests that the effect of cooperative phenotype on environmental sacrifice is positive but weak (although it is significant).
@@ -477,7 +490,6 @@ This means that our full model accounts for 11% of the variance in sacrifice mad
 
 Next, we plot how the slope of cooperative phenotype (the unstandardised parameter) varies across our different control models.
 
-
 ```{r echo=F}
 estimate <- se <- c()
 for (i in 1:7) {
@@ -486,7 +498,7 @@ for (i in 1:7) {
   se <- c(se, out$se[out$lhs=="sacrifice" & out$rhs=="coop" & out$op=="~"])
 }
 
-fig2a <-
+fig3a <-
   tibble(
     Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity", 
                   "Party support", "Education", "Full model")),
@@ -505,11 +517,12 @@ fig2a <-
   geom_hline(yintercept = 0, linetype = "dashed") +
   coord_flip() +
   xlab(NULL) +
-  ylab("Unstandardised Estimate\n(coop phenotype predicting pro-env behaviour)") +
-  ylim(-0.7,1.7)
+  ylab("Unstandardised Estimate\n(Cooperative Phenotype predicting\nPro-Environmental Behaviour)") +
+  scale_y_continuous(breaks = seq(-0.5, 2, by = 0.5), limits = c(-0.5, 2))
 
-fig2a
+fig3a
 
+# cleanup
 rm(estimate, se, i, out)
 ```
 
@@ -534,7 +547,7 @@ model <- '# measurement model
           # regression
           coop ~ party_Labour + party_DidNotVote + party_National + party_NZFirst + party_Other'
 semModel2.1h <- sem(model, data = d_temp, ordered = c('tg1','sh'))
-parameterEstimates(semModel2.1h)[10:14,]
+#parameterEstimates(semModel2.1h)[10:14,]
 inspect(semModel2.1h, "r2")
 ```
 
@@ -546,7 +559,12 @@ How well does this model fit the data?
 fitMeasures(semModel2.1h)["rmsea"] %>% round(2)
 fitMeasures(semModel2.1h)["srmr"] %>% round(2)
 ```
+
 This model fits the data well.
+
+```{r echo=F}
+rm(d_temp, model)
+```
 
 ## 2.2. Public Goods Game
 
@@ -580,31 +598,32 @@ parameterEstimates(semModel2.2a)[1,] %>%
   kable() %>% kable_styling(full_width = FALSE)
 ```
 
-Again, this slope of 0.25 is difficult to interpret on its own. However, it is also positive and significant. 
+Again, this slope of 0.25 is difficult to interpret on its own. However, it is also positive and significant.
 
 Get an effect size.
 
 ```{r echo=F}
 sqrt(inspect(semModel2.2a, "r2")["sacrifice"]) %>% as.numeric() %>% round(2)
 ```
+
 This means that the effect is small.
 
-Plot predictions.
+Plot the data.
 
 ```{r echo=F, warning=F, message=F}
-fig3a <-
-  d %>%
-  mutate(cut = cut(pgg*100, 11)) %>%
-  ggplot(aes(x = sacrifice, y = cut, group= sacrifice)) +
+figS1a <-
+  ggplot(d, aes(x = sacrifice, y = pgg*100, group = sacrifice)) +
   geom_boxplot(outlier.shape = NA) +
-  geom_jitter(width = 0.2, height = 0.3, colour = "darkseagreen4", alpha = 0.3) +
+  geom_jitter(height = 2, width = 0.2, colour = "darkseagreen", alpha = 0.15) +
   coord_flip() +
   scale_x_continuous(breaks = 1:7) +
-  scale_y_discrete(labels = seq(0, 100, length.out = 11)) +
-  labs(y = "Contribution in\nPublic Goods Game (points)", x = "Have you made sacrifices to your\nstandard of living in order to\nprotect the environment? (1-7)") +
-  theme(axis.title.y = element_text(size = 11))
+  labs(x = "Have you made sacrifices to your\nstandard of living in order to\nprotect the environment? (1-7)") +
+  theme(axis.title.y = element_text(size = 11),
+        axis.title.x = element_blank(),
+        axis.text.x  = element_blank(),
+        axis.ticks.x = element_blank())
 
-fig3a
+figS1a
 ```
 
 What happens when we control for the same variables as before? How much variation does the full model account for?
@@ -616,7 +635,7 @@ model <- 'sacrifice ~ pgg + age
           # comprehension
           pgg ~ pggcomp'
 semModel2.2b <- sem(model, data = d_temp, ordered = c('sacrifice'))
-# parameterEstimates(semModel2.2b)[1:2,]
+#parameterEstimates(semModel2.2b)[1:2,]
 
 # gender (n = 896)
 d_temp <- d %>% drop_na(gender)
@@ -624,7 +643,7 @@ model <- 'sacrifice ~ pgg + gender
           # comprehension
           pgg ~ pggcomp'
 semModel2.2c <- sem(model, data = d_temp, ordered = c('sacrifice'))
-# parameterEstimates(semModel2.2c)[1:2,]
+#parameterEstimates(semModel2.2c)[1:2,]
 
 # ethnicity (n = 890)
 d_temp <- d %>% drop_na(ethnic)
@@ -632,7 +651,7 @@ model <- 'sacrifice ~ pgg + ethnic_Asian + ethnic_Maori + ethnic_Pacific
           # comprehension
           pgg ~ pggcomp'
 semModel2.2d <- sem(model, data = d_temp, ordered = c('sacrifice'))
-# parameterEstimates(semModel2.2d)[1:4,]
+#parameterEstimates(semModel2.2d)[1:4,]
 
 # party support (n = 877)
 d_temp <- d %>% drop_na(party)
@@ -640,7 +659,7 @@ model <- 'sacrifice ~ pgg + party_Labour + party_Greens + party_National + party
           # comprehension
           pgg ~ pggcomp'
 semModel2.2e <- sem(model, data = d_temp, ordered = c('sacrifice'))
-# parameterEstimates(semModel2.2e)[1:6,]
+#parameterEstimates(semModel2.2e)[1:6,]
 
 # nzreg (n = 896)
 d_temp <- d %>% drop_na(nzreg)
@@ -648,7 +667,7 @@ model <- 'sacrifice ~ pgg + nzreg
           # comprehension
           pgg ~ pggcomp'
 semModel2.2f <- sem(model, data = d_temp, ordered = c('sacrifice'))
-# parameterEstimates(semModel2.2f)[1:2,]
+#parameterEstimates(semModel2.2f)[1:2,]
 
 # full model (n = 868)
 d_temp <- d %>% drop_na(age, gender, ethnic, party, nzreg)
@@ -656,30 +675,27 @@ model <- 'sacrifice ~ pgg + age + gender + ethnic_Asian + ethnic_Maori + ethnic_
           # comprehension
           pgg ~ pggcomp'
 semModel2.2g <- sem(model, data = d_temp, ordered = c('sacrifice'))
-# parameterEstimates(semModel2.2g)[1:12,]
+#parameterEstimates(semModel2.2g)[1:12,]
 inspect(semModel2.2g, "r2")
 ```
 
 This means that the full model accounts for 11% in the variation in sacrifices made for the environment. What accounts for this increase (verses 1% with PGG alone)?
 
 ```{r echo = FALSE, message=F, warning=F}
-fig5a <-  
-  tibble(
-    model = c("alone","w/Age","w/Gender","w/Ethn", "w/Party", "w/Edu", "w/All"),
-    r2 = c(inspect(semModel2.2a,"r2")[1],
-           inspect(semModel2.2b,"r2")[1],
-           inspect(semModel2.2c,"r2")[1],
-           inspect(semModel2.2d,"r2")[1],
-           inspect(semModel2.2e,"r2")[1],
-           inspect(semModel2.2f,"r2")[1],
-           inspect(semModel2.2g,"r2")[1])
+tibble(
+  model = c("alone","w/Age","w/Gender","w/Ethn", "w/Party", "w/Edu", "w/All"),
+  r2 = c(inspect(semModel2.2a,"r2")[1],
+         inspect(semModel2.2b,"r2")[1],
+         inspect(semModel2.2c,"r2")[1],
+         inspect(semModel2.2d,"r2")[1],
+         inspect(semModel2.2e,"r2")[1],
+         inspect(semModel2.2f,"r2")[1],
+         inspect(semModel2.2g,"r2")[1])
   ) %>% 
   ggplot(aes(x = factor(model, levels = .$model), y = r2)) +
   geom_bar(stat = "identity", fill = "skyblue4") +
   scale_y_continuous(limits = c(0, 0.3)) +
   labs(y = bquote(R^2), x = "Model: Pro-environemntal behaviour")
-
-fig5a
 ```
 
 Political party support accounts for the large majority of variance in sacrifice for the environment that the full model explains (11%).
@@ -694,15 +710,14 @@ for (i in 1:7) {
   se <- c(se, out$se[out$lhs=="sacrifice" & out$rhs=="pgg" & out$op=="~"])
 }
 
-fig4a <-
-  tibble(
-    Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity", 
-                  "Party support", "Education", "Full model")),
-                  levels = c("No controls", "Age", "Gender", "Ethnicity", 
-                  "Party support", "Education", "Full model")),
-    Estimate = estimate,
-    ci.lower = estimate + (1.96*se),
-    ci.upper = estimate - (1.96*se)
+tibble(
+  Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity", 
+                "Party support", "Education", "Full model")),
+                levels = c("No controls", "Age", "Gender", "Ethnicity", 
+                "Party support", "Education", "Full model")),
+  Estimate = estimate,
+  ci.lower = estimate + (1.96*se),
+  ci.upper = estimate - (1.96*se)
   ) %>%
   
   ggplot(aes(x = fct_rev(Model), 
@@ -716,8 +731,7 @@ fig4a <-
   ylab("Unstandardised Estimate\n(PGG predicting sacrifice enacted)") +
   ylim(-0.7,1.7)
 
-fig4a
-
+# cleanup
 rm(estimate, se, i, out)
 ```
 
@@ -743,6 +757,11 @@ inspect(semModel2.2h, "r2")
 ```
 
 This means that political party supported accounts for 1% of the variance in PGG. National party supporters gave significantly less in the PGG relative to Green party supporters.
+
+```{r echo=F}
+# cleanup
+rm(d_temp, model)
+```
 
 # 3. SEM (Climate Change Belief)
 
@@ -780,7 +799,7 @@ This model fits the data well. How much variance does it account for?
 inspect(semModel3.1a, "r2")
 ```
 
-This means that the latent variable "cooperative phenotype" accounts for 3% of the variation in the latent varaible "climate change beliefs".
+This means that the latent variable "cooperative phenotype" accounts for 3% of the variation in the latent variable "climate change beliefs".
 
 What is the regression coefficient?
 
@@ -808,31 +827,118 @@ sqrt(inspect(semModel3.1a, "r2")["ccb"]) %>% as.numeric() %>% round(2)
 
 The effect is small.
 
-Plotting will again help with interpretation.
+Do we find the same effect when regressing cooperative phenotype onto individual climate-change belief items (rather than the latent variable)?
 
 ```{r echo=F}
+# real
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          real ~ coop'
+semModel3.1a_real <- sem(model, data = d, ordered = c('tg1','sh','real'))
+parameterEstimates(semModel3.1a_real)[11,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+
+# human
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          human ~ coop'
+semModel3.1a_human <- sem(model, data = d, ordered = c('tg1','sh','human'))
+parameterEstimates(semModel3.1a_human)[11,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+
+# concern
+model <- '# measurement model
+          coop =~ pgg + dg + tg1 + tg2 + sh
+          # comprehension
+          pgg ~ pggcomp
+          tg1 + tg2 ~ tgcomp
+          sh ~ shcomp
+          dg ~ dgcomp
+          # regression
+          concern ~ coop'
+semModel3.1a_concern <- sem(model, data = d, ordered = c('tg1','sh','concern'))
+parameterEstimates(semModel3.1a_concern)[11,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
+```
+
+Yes, we find the same effect with each individual item. Effect sizes?
+
+```{r}
+sqrt(inspect(semModel3.1a_real, "r2")["real"]) %>% as.numeric() %>% round(2)
+sqrt(inspect(semModel3.1a_human, "r2")["human"]) %>% as.numeric() %>% round(2)
+sqrt(inspect(semModel3.1a_concern, "r2")["concern"]) %>% as.numeric() %>% round(2)
+```
+
+Plotting will again help with interpretation of these models.
+
+```{r echo=F, fig.height = 6, fig.width = 7, warning=F, message=F}
 # add latent variables to dataset
 d$coop_semModel3.1a <- predict(semModel3.1a)[,1]
 d$ccb_semModel3.1a  <- predict(semModel3.1a)[,2]
 
-# plot
-fig1b <-
+fig2a <-
   ggplot(d, aes(x = coop_semModel3.1a, y = ccb_semModel3.1a)) +
-  geom_jitter(height = 0.02, width = 0.02, colour = "steelblue", alpha = 0.15) +
-  geom_smooth(method = lm, se = FALSE, colour = "black", size = 0.5) +
+  geom_jitter(height = 0.1, width = 0.1, colour = "steelblue", alpha = 0.15) +
+  geom_smooth(method = lm, se = TRUE, colour = "black", size = 0.5) +
   scale_x_continuous(limits = c(-0.4, 0.4)) +
-  labs(x = "Cooperative Phenotype", y = "Climate Change Belief")
+  labs(y = "Climate Change Belief (factor score)  ") +
+  theme(axis.title.x = element_blank()) +
+  xlim(-0.4, 0.4) +
+  ylim(-1.5, 1.5)
 
-fig1b
+fig2b <-
+  ggplot(d, aes(x = real, y = coop_semModel2.1a, group = real)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(height = 0.02, width = 0.2, colour = "steelblue", alpha = 0.1, size = 0.5) +
+  coord_flip() +
+  scale_x_continuous(breaks = 1:7) +
+  labs(y = "", x = "Climate change is real (1-7)") +
+  ylim(-0.4, 0.4)
 
-# save
-fig1 <- plot_grid(fig1a + theme(axis.title.x = element_blank()), 
-                  fig1b, labels = c("a","b"), ncol = 1, align = "v")
-ggsave("figures/fig1.pdf", fig1, width = 5, height = 6)
-ggsave("figures/fig1.png", fig1, width = 5, height = 6)
+fig2c <-
+  ggplot(d, aes(x = human, y = coop_semModel2.1a, group = human)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(height = 0.02, width = 0.2, colour = "steelblue", alpha = 0.1, size = 0.5) +
+  coord_flip() +
+  scale_x_continuous(breaks = 1:7) +
+  labs(y = "", x = "Climate change is\ncaused by humans (1-7)") +
+  ylim(-0.4, 0.4)
+
+fig2d <-
+  ggplot(d, aes(x = concern, y = coop_semModel2.1a, group = concern)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(height = 0.02, width = 0.2, colour = "steelblue", alpha = 0.1, size = 0.5) +
+  coord_flip() +
+  scale_x_continuous(breaks = 1:7) +
+  labs(y = "", x = "I am deeply concerned\nabout climate change (1-7)") +
+  ylim(-0.4, 0.4)
+
+fig2_bottom <- plot_grid(fig2b, fig2c, fig2d, labels = c("b", "c", "d"), align = "h", nrow = 1)
+fig2 <- plot_grid(fig2a, fig2_bottom, labels = c("a", ""), nrow = 2, rel_heights = c(1, 0.9)) +
+  draw_label("Cooperative Phenotype (factor score)", size = 11, x = 0.5, y = 0, vjust = -0.5, angle = 0)
+
+fig2
+
+# save for publication
+ggsave(fig2, file = "figures/fig2.pdf", width = 7, height = 6)
 
 # cleanup
-rm(fig1a, fig1b)
+rm(fig2_bottom, fig2a, fig2b, fig2c, fig2d, model)
 ```
 
 Again, we ensure that this finding is robust to various controls, and provide a measure for variance explained.
@@ -950,34 +1056,23 @@ inspect(semModel3.1g, "r2")
 This means that the full model accounts for 29% of the variance in climate change beliefs. What accounts for this increase (from 3% with cooperative phenotype alone)?
 
 ```{r echo = FALSE, message=F, warning=F}
-fig5b <-  
-  tibble(
-    model = c("alone","w/Age","w/Gender","w/Ethn", "w/Party", "w/Edu", "w/All"),
-    r2 = c(inspect(semModel3.1a,"r2")[9],
-           inspect(semModel3.1b,"r2")[9],
-           inspect(semModel3.1c,"r2")[9],
-           inspect(semModel3.1d,"r2")[9],
-           inspect(semModel3.1e,"r2")[9],
-           inspect(semModel3.1f,"r2")[9],
-           inspect(semModel3.1g,"r2")[9])
+tibble(
+  model = c("alone","w/Age","w/Gender","w/Ethn", "w/Party", "w/Edu", "w/All"),
+  r2 = c(inspect(semModel3.1a,"r2")[9],
+         inspect(semModel3.1b,"r2")[9],
+         inspect(semModel3.1c,"r2")[9],
+         inspect(semModel3.1d,"r2")[9],
+         inspect(semModel3.1e,"r2")[9],
+         inspect(semModel3.1f,"r2")[9],
+         inspect(semModel3.1g,"r2")[9])
   ) %>% 
   ggplot(aes(x = factor(model, levels = .$model), y = r2)) +
   geom_bar(stat = "identity", fill = "skyblue4") +
   scale_y_continuous(limits = c(0, 0.3)) +
   labs(y = bquote(R^2), x = "Model: Climate Change Belief")
-
-fig5b 
-
-# save
-fig5 <- plot_grid(fig5a, fig5b + theme(axis.title.y = element_blank()), 
-                  labels = c("a","b"), nrow = 1, align = "vh")
-ggsave("figures/fig5.pdf", fig5, width = 9, height = 4)
-ggsave("figures/fig5.png", fig5, width = 9, height = 4)
-
-rm(fig5a, fig5b)
 ```
 
-This shows that political party support is responsable for the majority of the increase in variation in climate change beliefs explained by the full model. Below, we investigate how the slope of cooperative phenotype (the unstandardised parameter) varies across these models.
+This shows that political party support is responsible for the majority of the increase in variation in climate change beliefs explained by the full model. Below, we investigate how the slope of cooperative phenotype (the unstandardised parameter) varies across these models.
 
 ```{r echo=F}
 estimate <- se <- c()
@@ -987,7 +1082,7 @@ for (i in 1:7) {
   se <- c(se, out$se[out$lhs=="ccb" & out$rhs=="coop" & out$op=="~"])
 }
 
-fig2b <-
+fig3b <-
   tibble(
     Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity", 
                   "Party support", "Education", "Full model")),
@@ -1006,21 +1101,25 @@ fig2b <-
   geom_hline(yintercept = 0, linetype = "dashed") +
   coord_flip() +
   xlab(NULL) +
-  ylab("Unstandardised Estimate\n(coop phenotype predicting climate change belief)") +
-  ylim(-0.8,1.9) +
-  theme(axis.text.x = element_text(size = 9))
+  ylab("Unstandardised Estimate\n(Cooperative Phenotype predicting\nClimate Change Belief)") +
+  scale_y_continuous(breaks = seq(-0.5, 2, by = 0.5), limits = c(-0.5, 2))
 
-fig2b
+fig3b
 
 # save
-fig2 <- plot_grid(fig2a, fig2b, labels = c("a","b"), nrow = 1, align = "vh")
-ggsave("figures/fig2.pdf", fig2, width = 9, height = 4)
-ggsave("figures/fig2.png", fig2, width = 9, height = 4)
+fig3 <- plot_grid(fig3a, fig3b, labels = c("a","b"), nrow = 1, align = "vh")
+ggsave("figures/fig3.pdf", fig3, width = 9, height = 4)
 
-rm(fig2a, fig2b, estimate, se, i, out)
+# cleanup
+rm(fig3a, fig3b, estimate, se, i, out)
 ```
 
 We find the same pattern of results. The finding is robust to all controls except political party support.
+
+```{r echo=F}
+# cleanup
+rm(d_temp, model)
+```
 
 ## 3.2. Public Goods Game
 
@@ -1076,32 +1175,27 @@ Get an effect size.
 sqrt(inspect(semModel3.2a, "r2")["ccb"]) %>% as.numeric() %>% round(2)
 ```
 
-Let's plot this prediction.
+Let's plot the relationship.
 
 ```{r echo=F, message=F, warning=F}
 # add latent variables to dataset
 d$ccb_semModel3.2a  <- predict(semModel3.2a)
 
-# plot
-fig3b <-
-  d %>%
-  mutate(cut = cut(pgg*100, 11)) %>%
-  ggplot(aes(x = cut, y = ccb_semModel3.1a)) +
-  geom_boxplot(outlier.shape = NA) +
-  geom_jitter(aes(x = (pgg*10)+1), height = 0.3, width = 0.2, colour = "darkseagreen4", alpha = 0.3) +
-  labs(x = "Contribution in\nPublic Goods Game (points)", y = "Climate Change Belief") +
-  scale_x_discrete(labels = seq(0, 100, length.out = 11))
+figS1b <-
+  ggplot(d, aes(x = pgg*100, y = ccb_semModel3.2a)) +
+  geom_jitter(height = 0.1, width = 2, colour = "darkseagreen", alpha = 0.15) +
+  geom_smooth(method = lm, se = TRUE, colour = "black", size = 0.5) +
+  labs(y = "Climate Change Belief (factor score)",
+       x = "Public Goods Game (amount contributed)")
 
-fig3b
+figS1b
 
-# save 
-fig3 <- plot_grid(fig3a + theme(axis.title.x = element_blank()), 
-                  fig3b, labels = c("a","b"), ncol = 1, align = "v")
-ggsave("figures/fig3.pdf", fig3, width = 5, height = 6)
-ggsave("figures/fig3.png", fig3, width = 5, height = 6)
+# save for publication
+figS1 <- plot_grid(figS1a, figS1b, nrow = 2, align = "v", labels = c("a", "b"))
+ggsave(figS1, file = "figures/figS1.pdf", width = 5, height = 7)
 
 # cleanup
-rm(fig3a, fig3b)
+rm(figS1a, figS1b)
 ```
 
 And we introduce controls again, providing a measure of the variance explained by the full model.
@@ -1173,7 +1267,7 @@ semModel3.2g <- sem(model, data = d_temp, ordered = c('real','human','concern'))
 inspect(semModel3.2g, "r2")
 ```
 
-This means that the full model accounts for 28% of the variance in the latent variable "climate change beliefs".
+This means that the full model accounts for 28% of the variance in the latent variable "climate change belief".
 
 ```{r echo=F}
 estimate <- se <- c()
@@ -1183,15 +1277,14 @@ for (i in 1:7) {
   se <- c(se, out$se[out$lhs=="ccb" & out$rhs=="pgg" & out$op=="~"])
 }
 
-fig4b <-
-  tibble(
-    Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity", 
-                  "Party support", "Education", "Full model")),
-                  levels = c("No controls", "Age", "Gender", "Ethnicity", 
-                  "Party support", "Education", "Full model")),
-    Estimate = estimate,
-    ci.lower = estimate + (1.96*se),
-    ci.upper = estimate - (1.96*se)
+tibble(
+  Model = factor(rep(c("No controls", "Age", "Gender", "Ethnicity", 
+                "Party support", "Education", "Full model")),
+                levels = c("No controls", "Age", "Gender", "Ethnicity", 
+                "Party support", "Education", "Full model")),
+  Estimate = estimate,
+  ci.lower = estimate + (1.96*se),
+  ci.upper = estimate - (1.96*se)
   ) %>%
   
   ggplot(aes(x = fct_rev(Model), 
@@ -1206,14 +1299,7 @@ fig4b <-
   ylim(-0.7,1.6) +
   theme(axis.text.x = element_text(size = 9))
 
-fig4b
-
-# save
-fig4 <- plot_grid(fig4a, fig4b, labels = c("a","b"), nrow = 1, align = "vh")
-ggsave("figures/fig4.pdf", fig4, width = 9, height = 4)
-ggsave("figures/fig4.png", fig4, width = 9, height = 4)
-
-rm(fig4a, fig4b, estimate, se, i, out)
+rm(estimate, se, i, out)
 ```
 
 This differs from our results for the cooperative phenotype. None of the models are signficant.
@@ -1241,8 +1327,6 @@ semModel4.1a <- sem(model, data = d, ordered = c('tg1','sh','real','human',
                                                  'concern','sacrifice'))
 ```
 
-This model has a little trouble fitting, likely because of its complexity.
-
 How well does this model fit the data?
 
 ```{r echo=F}
@@ -1261,7 +1345,6 @@ This means that the model account for 1% of the variation in sacrifice enacted, 
 We can visualise this model as a path diagram with unstandardised estimates.
 
 ```{r echo=F, message=F, warning=F}
-# publication quality path diagram
 # modified from https://rpubs.com/tjmahr/sem_diagrammer
 
 # To describe edges, we need the origin, path-type, endpoint, and label.
@@ -1323,35 +1406,33 @@ regressions <- all_paths %>%
 edge_set <- combine_edfs(loadings, regressions)
 
 # Combine edges and nodes
-fig6 <- create_graph(
+fig <- create_graph(
   nodes_df = node_set,
   edges_df = edge_set)
 
 # change attributes
-fig6$global_attrs <-
-  fig6$global_attrs %>%
+fig$global_attrs <-
+  fig$global_attrs %>%
   mutate(value = ifelse(attr == "fontname", "Arial", value)) %>%
   mutate(value = ifelse(attr == "fillcolor", "white", value)) %>%  
   mutate(value = ifelse(attr == "color" & attr_type == "node", "black", value)) %>%
   mutate(value = ifelse(attr == "fontcolor" & attr_type == "node", "black", value))
   
-render_graph(fig6)
-
-# save to file
-export_graph(fig6, file_name = "figures/fig6.pdf")
-export_graph(fig6, file_name = "figures/fig6.png")
+render_graph(fig)
 
 # cleanup
 rm(all_paths, edge_set, latent, loadings, manifest, 
-   node_set, paths, regressions, nodes)
+   node_set, paths, regressions, nodes, fig, model, `%not_in%`)
 ```
 
 Here we calculate standardised estimates for both paths.
+
 ```{r echo=F}
 standardizedSolution(semModel4.1a)[14:16,] %>%
   mutate_if(is.numeric, round, 2) %>%
   kable() %>% kable_styling(full_width = FALSE)
 ```
+
 ...and unstandardised estimates (due to the cummulative link ordinal regression nature of our Likert scale data).
 
 ```{r echo=F}
@@ -1359,12 +1440,6 @@ parameterEstimates(semModel4.1a)[14:16,] %>%
   mutate_if(is.numeric, round, 2) %>%
   kable() %>% kable_styling(full_width = FALSE)
 ```
-How big are the effect sizes?
-
-```{r}
-sqrt(inspect(semModel4.1a, "r2"))
-```
-The effect size of cooperative phenotype on enviornmental sacrifice is small (r = 0.10), and the combined effect of cooperative phenotype and environmental sacrifice on climate change belief is moderate (0.46). 
 
 These coefficients suggest a *partial* mediation effect. Including environmental sacrifice as a mediator decreases the standardised parameter from the direct path (from 0.16 to 0.12). However, it remains positive and significant. The indirect path is also positive and significant. So some, but not all, of the effect of cooperative phenotype on climate change belief is explained by the mediation.
 
@@ -1495,7 +1570,9 @@ model <- '# measurement model
 semModel4.1h <- sem(model, data = d, ordered = c('tg1','sh','real',
                                                  'human','concern','sacrifice'))
 
-parameterEstimates(semModel4.1h)[14:16,]
+parameterEstimates(semModel4.1h)[14:16,] %>%
+  mutate_if(is.numeric, round, 2) %>%
+  kable() %>% kable_styling(full_width = FALSE)
 ```
 
 This is a full mediation effect. Let's compare the standardised estimates.
@@ -1506,24 +1583,27 @@ standardizedSolution(semModel4.1h)[14:16,] %>%
   kable() %>% kable_styling(full_width = FALSE)
 ```
 
-
-
 How well does this model fit?
 
-```{r}
+```{r echo=F}
 fitMeasures(semModel4.1h)["rmsea"] %>% round(2)
 fitMeasures(semModel4.1h)["srmr"] %>% round(2)
 ```
 
 The model is a good fit. How much variation does it account for?
 
-```{r}
+```{r echo=F}
 inspect(semModel4.1h, "r2")
 ```
 
 This means that this model accounts for 20% of the variation in sacrifice enacted, and 3% of the variation in climate change beliefs.
 
 Overall, the significance of both alternative mediation pathways suggests a feedback model, where all the variables are interacting with each another. However, due to the single time slice nature of our data, we are unable to make causal claims.
+
+```{r echo=F}
+# cleanup
+rm(d_temp, model)
+```
 
 ## 4.2. Public Goods Game
 
@@ -1534,58 +1614,50 @@ As we failed to find a significant effect for the direct path from PGG to climat
 In this additional section, we explore the variance in sacrifice explained by our control variables in comparison to both cooperative phenotype alone and the full model.
 
 ```{r echo = F}
-#building models for each of the control variables
+# building models for each of the control variables
 # age (n = 896)
 d_temp <- d %>% drop_na(age)
 model <- 'sacrifice ~ age'
-semModel2.1.1a <- sem(model, data = d_temp, ordered = c('sacrifice'))
+semModel2.1b_noCoop <- sem(model, data = d_temp, ordered = c('sacrifice'))
 
 # gender (n = 896)
 d_temp <- d %>% drop_na(gender)
 model <- 'sacrifice ~ gender'
-semModel2.1.1b <- sem(model, data = d_temp, ordered = c('sacrifice'))
+semModel2.1c_noCoop <- sem(model, data = d_temp, ordered = c('sacrifice'))
 
 # ethnicity (n = 890)
 d_temp <- d %>% drop_na(ethnic)
 model <- 'sacrifice ~ ethnic_Asian + ethnic_Maori + ethnic_Pacific'
-semModel2.1.1c <- sem(model, data = d_temp, ordered = c('sacrifice'))
+semModel2.1d_noCoop <- sem(model, data = d_temp, ordered = c('sacrifice'))
 
 # party support (n = 877)
 d_temp <- d %>% drop_na(party)
 model <- 'sacrifice ~ party_Labour + party_Greens + party_National + party_NZFirst + party_Other'
-semModel2.1.1d <- sem(model, data = d_temp, ordered = c('sacrifice'))
+semModel2.1e_noCoop <- sem(model, data = d_temp, ordered = c('sacrifice'))
 
 # nzreg (n = 896)
 d_temp <- d %>% drop_na(nzreg)
 model <- 'sacrifice ~ nzreg'
-semModel2.1.1e <- sem(model, data = d_temp, ordered = c('sacrifice'))
+semModel2.1f_noCoop <- sem(model, data = d_temp, ordered = c('sacrifice'))
 
-#building the graph
-fig5c <-  
+figS2a <-
   tibble(
-    model = c("coop","age","gender","ethn", "party", "edu", "full"),
-    r2 = c(inspect(semModel2.1a,"r2")[6],
-           inspect(semModel2.1.1a, "r2"),
-           inspect(semModel2.1.1b, "r2"),
-           inspect(semModel2.1.1c, "r2"),
-           inspect(semModel2.1.1d, "r2"),
-           inspect(semModel2.1.1e, "r2"),
-           inspect(semModel2.1g,"r2")[6])
-  ) %>% 
+    model = c("Cooperation","Age","Gender","Ethnicity", 
+              "Political Party", "Education", "Full Model"),
+    r2 = c(inspect(semModel2.1a, "r2")[6],
+           inspect(semModel2.1b_noCoop, "r2"),
+           inspect(semModel2.1c_noCoop, "r2"),
+           inspect(semModel2.1d_noCoop, "r2"),
+           inspect(semModel2.1e_noCoop, "r2"),
+           inspect(semModel2.1f_noCoop, "r2"),
+           inspect(semModel2.1g, "r2")[6])
+    ) %>% 
   ggplot(aes(x = factor(model, levels = .$model), y = r2)) +
   geom_bar(stat = "identity", fill = "skyblue4") +
   scale_y_continuous(limits = c(0, 0.3)) +
-  labs(y = bquote(R^2), x = "pro-environmental behaviour")
+  labs(y = bquote(R^2), x = "Pro-Environmental Behaviour") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-fig5c 
-
-```
-
-This shows that cooperative phenotype explains a similar amount of the variance in pro-environmental behaviour as ethnicity, and education. Interestingly, it explains more vairance than age.
-
-Below, we investigate the same comparisons with our latent climate change belief variable.
-
-```{r echo = F}
 #building models for each of the control variables
 # age (n = 896)
 d_temp <- d %>% drop_na(age)
@@ -1593,7 +1665,7 @@ model <- '# measurement model
           ccb =~ real + human + concern
           # regression
           ccb ~ age'
-semModel3.1.1a <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+semModel3.1b_noCoop <- sem(model, data = d_temp, ordered = c('real','human','concern'))
 
 # gender (n = 896)
 d_temp <- d %>% drop_na(gender)
@@ -1601,7 +1673,7 @@ model <- '# measurement model
           ccb =~ real + human + concern
           # regression
           ccb ~ gender'
-semModel3.1.1b <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+semModel3.1c_noCoop <- sem(model, data = d_temp, ordered = c('real','human','concern'))
 
 # ethnicity (n = 890)
 d_temp <- d %>% drop_na(ethnic)
@@ -1609,7 +1681,7 @@ model <- '# measurement model
           ccb =~ real + human + concern
           # regression
           ccb ~ ethnic_Asian + ethnic_Maori + ethnic_Pacific'
-semModel3.1.1c <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+semModel3.1d_noCoop <- sem(model, data = d_temp, ordered = c('real','human','concern'))
 
 # party support (n = 877)
 d_temp <- d %>% drop_na(party)
@@ -1617,7 +1689,7 @@ model <- '# measurement model
           ccb =~ real + human + concern
           # regression
           ccb ~ party_Labour + party_Greens + party_National + party_NZFirst + party_Other'
-semModel3.1.1d <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+semModel3.1e_noCoop <- sem(model, data = d_temp, ordered = c('real','human','concern'))
 
 # nzreg (n = 896)
 d_temp <- d %>% drop_na(nzreg)
@@ -1625,79 +1697,63 @@ model <- '# measurement model
           ccb =~ real + human + concern
           # regression
           ccb ~ nzreg'
-semModel3.1.1e <- sem(model, data = d_temp, ordered = c('real','human','concern'))
+semModel3.1f_noCoop <- sem(model, data = d_temp, ordered = c('real','human','concern'))
 
-#building the graph
-fig5d <-  
+figS2b <- 
   tibble(
-    model = c("coop","age","gender","ethn", "party", "edu", "full"),
+    model = c("Cooperation","Age","Gender","Ethnicity", 
+              "Political Party", "Education", "Full Model"),
     r2 = c(inspect(semModel3.1a,"r2")[9],
-           inspect(semModel3.1.1a, "r2")[4],
-           inspect(semModel3.1.1b, "r2")[4],
-           inspect(semModel3.1.1c, "r2")[4],
-           inspect(semModel3.1.1d, "r2")[4],
-           inspect(semModel3.1.1e, "r2")[4],
-           inspect(semModel3.1g,"r2")[9])
+           inspect(semModel3.1b_noCoop, "r2")[4],
+           inspect(semModel3.1c_noCoop, "r2")[4],
+           inspect(semModel3.1d_noCoop, "r2")[4],
+           inspect(semModel3.1e_noCoop, "r2")[4],
+           inspect(semModel3.1f_noCoop, "r2")[4],
+           inspect(semModel3.1g, "r2")[9])
   ) %>% 
   ggplot(aes(x = factor(model, levels = .$model), y = r2)) +
   geom_bar(stat = "identity", fill = "skyblue4") +
   scale_y_continuous(limits = c(0, 0.3)) +
-  labs(y = bquote(R^2), x = "climate change belief")
+  labs(y = "", x = "Climate Change Belief") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())
 
-fig5d 
+# save for publication
+figS2 <- plot_grid(figS2a, figS2b, nrow = 1, align = "h", labels = c("a", "b"))
+ggsave(figS2, file = "figures/figS2.pdf", width = 7, height = 5)
+figS2
 
-# save
-fig5_1 <- plot_grid(fig5c, fig5d + theme(axis.title.y = element_blank()), 
-                  labels = c("a","b"), nrow = 1, align = "vh")
-ggsave("figures/fig5_1.pdf", fig5_1, width = 9, height = 4)
-ggsave("figures/fig5_1.png", fig5_1, width = 9, height = 4)
-
-rm(fig5c, fig5d)
+# cleanup
+rm(figS2a, figS2b, d_temp, model)
 ```
 
-This shows that age accounts for 3% of the varation in climate change belief, and that gender accounts for 1% of the variation in climate change belief. Similarly, ethnicity, and education account for 1% and 8% of the variation in climate change belief respectively, while party accounts for 24%. This is comparable to the respective variance in climate change belief explained by cooperative phenotype alone (3%). 
+This shows that cooperative phenotype explains a similar amount of the variance in pro-environmental behaviour as ethnicity and education. Interestingly, it explains more variance than age.
+
+For climate change belief, age accounts for 3% of the varation, and gender accounts for 1% of the variation. Similarly, ethnicity and education account for 1% and 8% of the variation in climate change belief respectively, while party accounts for 24%. This is comparable to the respective variance in climate change belief explained by cooperative phenotype alone (3%). 
 
 # 6. Generating some basic graphs of initial variables
 
 ```{r, echo= FALSE, message=F, warning=F}
-fig8a <- 
-  ggplot(d, aes(x = real)) +
+ggplot(d, aes(x = real)) +
   geom_bar(fill = "green4") +
   labs(x = "Climate change is real", y = "Frequency") +
   scale_x_continuous(breaks = 1:7)
 
-fig8b <- 
-  ggplot(d, aes(x = human)) +
+ggplot(d, aes(x = human)) +
   geom_bar(fill = "blue4") +
   labs(x = "Climate change is caused by humans", y = "Frequency") +
   scale_x_continuous(breaks = 1:7)
   
-fig8c <- 
-  ggplot(d, aes(x = concern)) +
+ggplot(d, aes(x = concern)) +
   geom_bar(fill = "red4") +
   labs(x = "I am deeply concerned about climate change", y = "Frequency") +
   scale_x_continuous(breaks = 1:7)
 
-fig8d <- 
-  ggplot(d, aes(x = sacrifice)) +
+ggplot(d, aes(x = sacrifice)) +
   geom_bar(fill = "purple4") +
   labs(x = "Have you made sacrifices to your standard of living\nin order to protect the environment?", y = "Frequency") +
   scale_x_continuous(breaks = 1:7)
-
-fig8a
-fig8b
-fig8c
-fig8d
-
-# save
-fig8 <- plot_grid(fig8a, fig8b, fig8c, fig8d,
-                  labels = c("a","b","c","d"), 
-                  nrow = 2, ncol = 2, align = "vh")
-ggsave("figures/fig8.pdf", fig8, width = 8, height = 6)
-ggsave("figures/fig8.png", fig8, width = 8, height = 6)
-
-# cleanup
-rm(fig8a, fig8b, fig8c, fig8d)
 ```
 
 # Session Info
